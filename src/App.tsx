@@ -22,9 +22,7 @@ import { MediaPipeTracker } from "./tracking/MediaPipeTracker";
 import { convertVideoToCompatibleMP4 } from "./engine/videoConverter";
 import { analyzePose, detectPunch } from "./engine/analyzer";
 import { coach, compareStyle, STYLES } from "./engine/coach";
-import {
-  recordDiagnostic,
-} from "./engine/diagnostics";
+import { recordDiagnostic } from "./engine/diagnostics";
 import { Landmark, Metrics, Punch } from "./types";
 
 import MetricCard from "./components/MetricCard";
@@ -865,10 +863,8 @@ export default function App() {
             className="app-logo"
           />
 
-          <div>
-            <h1>
-              Bivol Boxing Lab
-            </h1>
+          <div className="brand-copy">
+            <h1>Bivol Boxing Lab</h1>
 
             <p>
               REAL-TIME BIOMECHANICS COACH
@@ -883,9 +879,11 @@ export default function App() {
             }`}
           />
 
-          {ready
-            ? "MODEL READY"
-            : "MODEL OFFLINE"}
+          <span>
+            {ready
+              ? "MODEL READY"
+              : "MODEL OFFLINE"}
+          </span>
         </div>
       </header>
 
@@ -900,14 +898,17 @@ export default function App() {
             }
           >
             <Camera size={18} />
-            Live Camera
+            <span>Live Camera</span>
           </button>
 
           <label className="secondary-button upload-button">
             <Upload size={18} />
-            {converting
-              ? "Converting..."
-              : "Upload Video"}
+
+            <span>
+              {converting
+                ? "Converting..."
+                : "Upload Video"}
+            </span>
 
             <input
               type="file"
@@ -927,7 +928,7 @@ export default function App() {
                 onClick={stopCamera}
               >
                 <Square size={18} />
-                Stop
+                <span>Stop</span>
               </button>
             )}
 
@@ -937,42 +938,46 @@ export default function App() {
             disabled={converting}
           >
             <RotateCcw size={18} />
-            Reset
+            <span>Reset</span>
           </button>
         </div>
 
         {converting && (
           <div className="conversion-status">
-            <div>
+            <div className="conversion-copy">
               Preparing video for
               cross-device analysis...
             </div>
 
-            <div className="conversion-bar">
-              <div
-                className="conversion-progress"
-                style={{
-                  width: `${
-                    conversionProgress *
-                    100
-                  }%`,
-                }}
-              />
-            </div>
+            <div className="conversion-progress-row">
+              <div className="conversion-bar">
+                <div
+                  className="conversion-progress"
+                  style={{
+                    width: `${
+                      conversionProgress *
+                      100
+                    }%`,
+                  }}
+                />
+              </div>
 
-            <span>
-              {Math.round(
-                conversionProgress * 100
-              )}
-              %
-            </span>
+              <span>
+                {Math.round(
+                  conversionProgress *
+                    100
+                )}
+                %
+              </span>
+            </div>
           </div>
         )}
 
         {videoName && (
           <div className="video-name">
             <Video size={16} />
-            {videoName}
+
+            <span>{videoName}</span>
           </div>
         )}
 
@@ -1009,7 +1014,7 @@ export default function App() {
           {!video.current?.src &&
             !video.current?.srcObject && (
               <div className="video-placeholder">
-                <Activity size={48} />
+                <Activity size={44} />
 
                 <h2>
                   Ready to Analyze
@@ -1026,11 +1031,13 @@ export default function App() {
 
       <section className="style-panel">
         <div className="section-title">
-          <h2>Style Target</h2>
+          <div>
+            <h2>Style Target</h2>
 
-          <span>
-            Compare your mechanics
-          </span>
+            <span>
+              Compare your mechanics
+            </span>
+          </div>
         </div>
 
         <div className="style-buttons">
@@ -1116,11 +1123,13 @@ export default function App() {
 
         <div className="stats-card">
           <div className="section-title">
-            <h2>Biomechanics</h2>
+            <div>
+              <h2>Biomechanics</h2>
 
-            <span>
-              Live measurements
-            </span>
+              <span>
+                Live measurements
+              </span>
+            </div>
           </div>
 
           <div className="stats-list">
