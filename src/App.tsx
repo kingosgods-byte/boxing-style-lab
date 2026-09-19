@@ -22,6 +22,9 @@ import { MediaPipeTracker } from "./tracking/MediaPipeTracker";
 import { convertVideoToCompatibleMP4 } from "./engine/videoConverter";
 import { analyzePose, detectPunch } from "./engine/analyzer";
 import { coach, compareStyle, STYLES } from "./engine/coach";
+import {
+  recordDiagnostic,
+} from "./engine/diagnostics";
 import { Landmark, Metrics, Punch } from "./types";
 
 import MetricCard from "./components/MetricCard";
@@ -141,10 +144,32 @@ export default function App() {
       return;
     }
 
-    await tracker.current.init();
+    try {
+      await tracker.current.init();
 
-    readyRef.current = true;
-    setReady(true);
+      readyRef.current = true;
+      setReady(true);
+    } catch (e) {
+      const message =
+        e instanceof Error
+          ? e.message
+          : "Unknown model initialization error.";
+
+      recordDiagnostic(
+        "MediaPipe model initialization failed",
+        {
+          severity: "critical",
+          category: "model",
+          details: message,
+          stack:
+            e instanceof Error
+              ? e.stack
+              : undefined,
+        }
+      );
+
+      throw e;
+    }
   }
 
   async function startCamera() {
@@ -152,7 +177,38 @@ export default function App() {
       setError("");
 
       if (!video.current) {
-        return;
+        const message =
+          "Video element is unavailable.";
+
+        recordDiagnostic(
+          "Camera could not start because the video element is unavailable",
+          {
+            severity: "critical",
+            category: "camera",
+            details: message,
+          }
+        );
+
+        throw new Error(message);
+      }
+
+      if (
+        !navigator.mediaDevices ||
+        !navigator.mediaDevices.getUserMedia
+      ) {
+        const message =
+          "Camera access is not supported by this browser.";
+
+        recordDiagnostic(
+          "Camera API is unavailable",
+          {
+            severity: "critical",
+            category: "camera",
+            details: message,
+          }
+        );
+
+        throw new Error(message);
       }
 
       const stream =
@@ -205,6 +261,26 @@ export default function App() {
           ? e.message
           : "Unknown camera error.";
 
+      const name =
+        e instanceof DOMException
+          ? e.name
+          : undefined;
+
+      recordDiagnostic(
+        "Camera initialization failed",
+        {
+          severity: "critical",
+          category: "camera",
+          details: name
+            ? `${name}: ${message}`
+            : message,
+          stack:
+            e instanceof Error
+              ? e.stack
+              : undefined,
+        }
+      );
+
       setError(
         `Camera initialization failed: ${message}`
       );
@@ -239,9 +315,19 @@ export default function App() {
 
   async function loadVideoFile(file: File) {
     if (!video.current) {
-      throw new Error(
-        "Video element is unavailable."
+      const message =
+        "Video element is unavailable.";
+
+      recordDiagnostic(
+        "Video loading failed because the video element is unavailable",
+        {
+          severity: "error",
+          category: "media",
+          details: message,
+        }
       );
+
+      throw new Error(message);
     }
 
     const currentVideo = video.current;
@@ -308,16 +394,38 @@ export default function App() {
             mediaError.message ||
             "The browser could not decode this video.";
 
+          const fullMessage =
+            `Video decoder error ${errorCode}: ${errorMessage}`;
+
+          recordDiagnostic(
+            "Video decoder failed",
+            {
+              severity: "error",
+              category: "media",
+              details: fullMessage,
+              resource: file.name,
+            }
+          );
+
           reject(
-            new Error(
-              `Video decoder error ${errorCode}: ${errorMessage}`
-            )
+            new Error(fullMessage)
           );
         } else {
+          const message =
+            "The browser could not decode this video.";
+
+          recordDiagnostic(
+            "Browser could not decode uploaded video",
+            {
+              severity: "error",
+              category: "media",
+              details: message,
+              resource: file.name,
+            }
+          );
+
           reject(
-            new Error(
-              "The browser could not decode this video."
-            )
+            new Error(message)
           );
         }
       };
@@ -359,9 +467,20 @@ export default function App() {
       !currentVideo.videoWidth ||
       !currentVideo.videoHeight
     ) {
-      throw new Error(
-        "The video has no readable video frames."
+      const message =
+        "The video has no readable video frames.";
+
+      recordDiagnostic(
+        "Uploaded video contains no readable video frames",
+        {
+          severity: "error",
+          category: "media",
+          details: message,
+          resource: file.name,
+        }
       );
+
+      throw new Error(message);
     }
   }
 
@@ -369,9 +488,19 @@ export default function App() {
     await loadVideoFile(file);
 
     if (!video.current) {
-      throw new Error(
-        "Video element unavailable."
+      const message =
+        "Video element unavailable.";
+
+      recordDiagnostic(
+        "Original video analysis failed because the video element is unavailable",
+        {
+          severity: "error",
+          category: "media",
+          details: message,
+        }
       );
+
+      throw new Error(message);
     }
 
     await initializeTracker();
@@ -429,6 +558,23 @@ export default function App() {
           originalError
         );
 
+        recordDiagnostic(
+          "Original uploaded video could not be analyzed",
+          {
+            severity: "warning",
+            category: "media",
+            details:
+              originalError instanceof Error
+                ? originalError.message
+                : String(originalError),
+            resource: file.name,
+            stack:
+              originalError instanceof Error
+                ? originalError.stack
+                : undefined,
+          }
+        );
+
         setConverting(true);
         setConversionProgress(0);
 
@@ -474,6 +620,20 @@ export default function App() {
         e instanceof Error
           ? e.message
           : "Unknown video processing error.";
+
+      recordDiagnostic(
+        "Video analysis failed",
+        {
+          severity: "critical",
+          category: "media",
+          details: message,
+          resource: file.name,
+          stack:
+            e instanceof Error
+              ? e.stack
+              : undefined,
+        }
+      );
 
       setError(
         `This video could not be prepared for analysis. ${message}`
@@ -608,6 +768,19 @@ export default function App() {
             e instanceof Error
               ? e.message
               : "Unknown pose analysis error.";
+
+          recordDiagnostic(
+            "Pose detection failed",
+            {
+              severity: "critical",
+              category: "model",
+              details: message,
+              stack:
+                e instanceof Error
+                  ? e.stack
+                  : undefined,
+            }
+          );
 
           setError(
             `Pose analysis stopped: ${message}`
