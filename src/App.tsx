@@ -76,6 +76,10 @@ export default function App() {
   const timerIntervalRef = useRef<number | null>(null);
   const wakeLockRef = useRef<any | null>(null);
 
+  // Smoothing and Audio Refs
+  const prevLandmarksRef = useRef<any[] | null>(null);
+  const audioCtxRef = useRef<AudioContext | null>(null);
+
   // MediaRecorder Refs
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const recordedChunksRef = useRef<Blob[]>([]);
@@ -154,6 +158,35 @@ export default function App() {
     };
   }, [isRecording]);
 
+  const playPunchSfx = () => {
+    if (!audioFeedback) return;
+    try {
+      if (!audioCtxRef.current) {
+        audioCtxRef.current = new (window.AudioContext || (window as any).webkitAudioContext)();
+      }
+      const ctx = audioCtxRef.current;
+      if (ctx.state === 'suspended') ctx.resume();
+
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+
+      osc.type = 'triangle';
+      osc.frequency.setValueAtTime(140, ctx.currentTime);
+      osc.frequency.exponentialRampToValueAtTime(30, ctx.currentTime + 0.12);
+
+      gain.gain.setValueAtTime(0.5, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.12);
+
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+
+      osc.start();
+      osc.stop(ctx.currentTime + 0.12);
+    } catch (e) {
+      // Audio context policy fallback
+    }
+  };
+
   const speakFeedback = (text: string) => {
     if (!audioFeedback || !('speechSynthesis' in window)) return;
     window.speechSynthesis.cancel();
@@ -161,6 +194,28 @@ export default function App() {
     utterance.rate = 1.1;
     utterance.pitch = 1.0;
     window.speechSynthesis.speak(utterance);
+  };
+
+  // Smooth landmarks using Exponential Moving Average (EMA) to eliminate jitter
+  const smoothLandmarks = (rawLandmarks: any[]) => {
+    const alpha = 0.4; // Smoothing factor (higher = smoother, lower = more responsive)
+    if (!prevLandmarksRef.current) {
+      prevLandmarksRef.current = rawLandmarks;
+      return rawLandmarks;
+    }
+
+    const smoothed = rawLandmarks.map((pt, i) => {
+      const prev = prevLandmarksRef.current![i] || pt;
+      return {
+        x: prev.x * alpha + pt.x * (1 - alpha),
+        y: prev.y * alpha + pt.y * (1 - alpha),
+        z: prev.z * alpha + pt.z * (1 - alpha),
+        visibility: pt.visibility
+      };
+    });
+
+    prevLandmarksRef.current = smoothed;
+    return smoothed;
   };
 
   const processVideoFrame = () => {
@@ -178,7 +233,6 @@ export default function App() {
       if (canvas) {
         const ctx = canvas.getContext('2d');
         if (ctx) {
-          // Synchronize canvas buffer resolution directly with the actual video stream dimensions
           if (canvas.width !== video.videoWidth || canvas.height !== video.videoHeight) {
             canvas.width = video.videoWidth;
             canvas.height = video.videoHeight;
@@ -187,7 +241,9 @@ export default function App() {
           ctx.clearRect(0, 0, canvas.width, canvas.height);
 
           if (results.landmarks && results.landmarks[0]) {
-            const landmarks = results.landmarks[0];
+            const rawLandmarks = results.landmarks[0];
+            const landmarks = smoothLandmarks(rawLandmarks);
+
             if (showSkeleton) {
               drawSkeleton(ctx, landmarks, canvas.width, canvas.height);
             }
@@ -195,6 +251,8 @@ export default function App() {
             const punch = analyzerRef.current.processFrame(landmarks, performance.now());
             if (punch) {
               setLastPunch(punch);
+              playPunchSfx();
+
               if (punch.type === 'jab') setJabs((prev) => prev + 1);
               if (punch.type === 'cross') setCrosses((prev) => prev + 1);
 
@@ -307,12 +365,11 @@ export default function App() {
       }
     };
 
-    // Upper body key connections (arms, shoulders, torso)
-    drawLine(11, 12); // Shoulders
-    drawLine(11, 13); drawLine(13, 15); // Left arm
-    drawLine(12, 14); drawLine(14, 16); // Right arm
-    drawLine(11, 23); drawLine(12, 24); // Torso sides
-    drawLine(23, 24); // Hips
+    drawLine(11, 12);
+    drawLine(11, 13); drawLine(13, 15);
+    drawLine(12, 14); drawLine(14, 16);
+    drawLine(11, 23); drawLine(12, 24);
+    drawLine(23, 24);
   };
 
   const handleStartTimedSession = () => {
@@ -432,7 +489,7 @@ export default function App() {
                 BRAWLER LABS
               </h1>
               <span className={`text-[9px] px-2 py-0.5 rounded border font-semibold ${currentTheme.badgeBg}`}>
-                ALIGNED TRACKER
+                SMOOTH PWA
               </span>
             </div>
             <p className="text-[10px] text-slate-500">Biomechanical Cloud Analytics</p>
@@ -725,14 +782,14 @@ export default function App() {
 
               {/* Audio Controls */}
               <div className="space-y-2.5">
-                <label className="text-xs text-slate-500 block uppercase font-bold">Voice Coaching</label>
+                <label className="text-xs text-slate-500 block uppercase font-bold">Voice Coaching & SFX</label>
                 <button
                   onClick={() => setAudioFeedback(!audioFeedback)}
                   className="w-full h-14 px-4 bg-slate-900 border border-slate-800 rounded-xl flex justify-between items-center touch-manipulation"
                 >
                   <div className="flex items-center gap-2.5">
                     {audioFeedback ? <Volume2 className="w-5 h-5 text-emerald-400" /> : <VolumeX className="w-5 h-5 text-slate-500" />}
-                    <span className="text-xs text-slate-300">Live Feedback Audio</span>
+                    <span className="text-xs text-slate-300">Live Feedback & Hit Audio</span>
                   </div>
                   <span className={`text-xs font-bold ${audioFeedback ? 'text-emerald-400' : 'text-slate-500'}`}>
                     {audioFeedback ? 'ENABLED' : 'MUTED'}
@@ -764,7 +821,7 @@ export default function App() {
             </div>
 
             <div className="text-[10px] text-slate-600 text-center border-t border-slate-900 pt-4 mt-6">
-              Brawler Boxing Labs v2.0 • Aligned Tracker
+              Brawler Boxing Labs v2.0 • Smooth PWA Edition
             </div>
           </div>
         </div>
