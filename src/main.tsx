@@ -2,10 +2,7 @@ import React from "react";
 import ReactDOM from "react-dom/client";
 
 import App from "./App";
-import { installGlobalDiagnostics } from "./engine/diagnostics";
-import "./index.css"; // <-- Change 'styles.css' to 'index.css'
-
-installGlobalDiagnostics();
+import "./index.css";
 
 ReactDOM.createRoot(
   document.getElementById("root")!
