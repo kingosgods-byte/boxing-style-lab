@@ -1,79 +1,38 @@
-import { NormalizedLandmark } from '@mediapipe/tasks-vision';
-import { FIGHTER_STYLES, StyleProfile } from './styleProfiles';
-import { UserStats } from './userDataEngine';
-
-export interface AIAdvice {
-  score: number;
-  metricName: string;
-  feedback: string;
-  severity: 'good' | 'warning' | 'critical';
-  timestamp: number;
-}
+import { STYLE_PROFILES, StyleProfile } from './styleProfiles';
 
 export class AICoachEngine {
-  private lastAdviceTime: number = 0;
-  private readonly ADVICE_COOLDOWN_MS = 1600;
+  private activeProfile: StyleProfile;
 
-  public evaluatePunch(
-    type: 'jab' | 'cross',
-    landmarks: NormalizedLandmark[],
-    elbowAngle: number,
-    velocity: number,
-    styleId: string = 'bivol',
-    userStats?: UserStats
-  ): AIAdvice | null {
-    const now = Date.now();
-    if (now - this.lastAdviceTime < this.ADVICE_COOLDOWN_MS) return null;
-    if (!landmarks || landmarks.length < 33) return null;
+  constructor(profileKey: 'SOVIET_CLASSIC' | 'MEXICAN_PRESSURE') {
+    this.activeProfile = STYLE_PROFILES[profileKey];
+  }
 
-    const profile: StyleProfile = FIGHTER_STYLES[styleId] || FIGHTER_STYLES.bivol;
+  public evaluatePosture(landmarks: any[]): string[] {
+    const feedback: string[] = [];
+    
+    // Extract key joints (MediaPipe Indices: Nose=0, Shoulders=11/12, Hips=23/24)
+    const nose = landmarks[0];
+    const leftHip = landmarks[23];
+    const rightHip = landmarks[24];
+    
+    // Calculate torso lean for slip/bait mechanics
+    const hipCenterZ = (leftHip.z + rightHip.z) / 2;
+    const torsoLean = Math.abs(nose.x - (leftHip.x + rightHip.x) / 2);
 
-    const offWrist = type === 'jab' ? landmarks[16] : landmarks[15];
-    const offShoulder = type === 'jab' ? landmarks[12] : landmarks[11];
-    const userGuardDrop = Math.abs(offWrist.y - offShoulder.y);
-
-    const extensionDiff = profile.minExtensionAngle - elbowAngle;
-
-    let score = 100;
-    if (extensionDiff > 10) score -= Math.min(40, extensionDiff * 2);
-    if (userGuardDrop > profile.guardThresholdY) score -= 30;
-
-    let personalizedHint = '';
-    if (userStats && userStats.samplesCount >= 10) {
-      const pastAvg = type === 'jab' ? userStats.avgJabAngle : userStats.avgCrossAngle;
-      if (elbowAngle > pastAvg + 3) {
-        personalizedHint = ` (+${Math.round(elbowAngle - pastAvg)}° past your average!)`;
+    if (this.activeProfile.allowHeadSlipBait) {
+      // Canelo style: Checking if user is successfully shifting weight back without losing balance
+      if (torsoLean > 0.15 && nose.z < hipCenterZ) {
+        feedback.push("Good weight transfer! Excellent reactive pull-back.");
+      } else {
+        feedback.push("Plant your feet and let them come to you—wait to counter off the slip.");
+      }
+    } else {
+      // Soviet style: Strict upright posture
+      if (torsoLean > 0.08) {
+        feedback.push("Torso leaning too far. Keep your spine vertical, Soviet style.");
       }
     }
 
-    this.lastAdviceTime = now;
-
-    if (userGuardDrop > profile.guardThresholdY) {
-      return {
-        score: Math.max(20, Math.round(score)),
-        metricName: 'Guard Shield Deficit',
-        feedback: `Guard dropped! Shield your chin with your off-hand like ${profile.name}.`,
-        severity: 'critical',
-        timestamp: now
-      };
-    }
-
-    if (extensionDiff > 10) {
-      return {
-        score: Math.max(30, Math.round(score)),
-        metricName: 'Extension Precision',
-        feedback: `Extension reached ${Math.round(elbowAngle)}° (Benchmark for ${profile.name}: ${profile.minExtensionAngle}°). Fully snap into the target.${personalizedHint}`,
-        severity: 'warning',
-        timestamp: now
-      };
-    }
-
-    return {
-      score: Math.min(100, Math.round(score)),
-      metricName: 'Archetype Precision',
-      feedback: `Flawless ${type.toUpperCase()} execution! Matched ${profile.name}'s kinematic mechanics and guard level.${personalizedHint}`,
-      severity: 'good',
-      timestamp: now
-    };
+    return feedback;
   }
 }
