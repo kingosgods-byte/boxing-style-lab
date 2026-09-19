@@ -158,33 +158,33 @@ export default function App() {
   const leadRatio = totalPunches > 0 ? Math.round((jabs / totalPunches) * 100) : 0;
 
   return (
-    <div className="bg-slate-950 text-slate-100 min-h-screen p-6 font-mono">
+    <div className="bg-slate-950 text-slate-100 min-h-screen p-3 sm:p-6 font-mono">
       {/* Header Bar */}
-      <header className="flex justify-between items-center border-b border-slate-800 pb-4 mb-6">
+      <header className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 border-b border-slate-800 pb-4 mb-4 sm:mb-6">
         <div className="flex items-center gap-3">
           <img
             src={`${import.meta.env.BASE_URL}logo.png`}
             alt="Bivol Boxing Lab"
-            className="h-9 w-auto object-contain"
+            className="h-8 sm:h-9 w-auto object-contain"
             onError={(e) => { (e.target as HTMLElement).style.display = 'none'; }}
           />
           <div>
-            <h1 className="text-xl font-bold tracking-wider text-cyan-400">BIVOL BOXING LAB</h1>
-            <p className="text-xs text-slate-400">Vector Biomechanics & Kinetic AI Engine</p>
+            <h1 className="text-lg sm:text-xl font-bold tracking-wider text-cyan-400">BIVOL BOXING LAB</h1>
+            <p className="text-[10px] sm:text-xs text-slate-400">Vector Biomechanics & Kinetic AI Engine</p>
           </div>
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2 w-full sm:w-auto justify-between sm:justify-start">
           <button
             onClick={startCamera}
             disabled={isLoadingModel}
-            className="flex items-center gap-1.5 px-3 py-1.5 bg-cyan-600 hover:bg-cyan-500 disabled:bg-slate-800 text-xs font-semibold rounded-lg transition-all"
+            className="flex-1 sm:flex-initial flex items-center justify-center gap-1.5 px-3 py-1.5 bg-cyan-600 hover:bg-cyan-500 disabled:bg-slate-800 text-xs font-semibold rounded-lg transition-all"
           >
             <Camera className="w-3.5 h-3.5" /> Live Camera
           </button>
 
-          <label className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-xs font-semibold rounded-lg cursor-pointer transition-all">
-            <Upload className="w-3.5 h-3.5 text-slate-300" /> Upload Video
+          <label className="flex-1 sm:flex-initial flex items-center justify-center gap-1.5 px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-xs font-semibold rounded-lg cursor-pointer transition-all">
+            <Upload className="w-3.5 h-3.5 text-slate-300" /> Upload
             <input type="file" accept="video/*" onChange={handleVideoUpload} className="hidden" />
           </label>
 
@@ -199,24 +199,24 @@ export default function App() {
       </header>
 
       {/* Main Grid Layout */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Video Container */}
-        <div className="lg:col-span-2 relative bg-slate-900 rounded-xl border border-slate-800 overflow-hidden min-h-[480px] flex items-center justify-center">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6">
+        {/* Responsive Mobile Video Container */}
+        <div className="lg:col-span-2 relative bg-slate-900 rounded-xl border border-slate-800 overflow-hidden w-full aspect-[4/3] sm:aspect-video flex items-center justify-center">
           <video
             ref={videoRef}
             playsInline
             muted
-            className="absolute inset-0 w-full h-full object-cover"
+            className="absolute inset-0 w-full h-full object-contain bg-black"
           />
           <canvas
             ref={canvasRef}
-            className="absolute inset-0 w-full h-full object-cover pointer-events-none"
+            className="absolute inset-0 w-full h-full object-contain pointer-events-none"
           />
 
           {!isCameraActive && (
-            <div className="text-slate-500 text-sm text-center z-10">
-              <Activity className="w-8 h-8 text-cyan-400 mx-auto mb-2 animate-bounce" />
-              <p>{isLoadingModel ? 'Loading MediaPipe Pose Model...' : 'Click "Live Camera" or "Upload Video" to start'}</p>
+            <div className="text-slate-500 text-xs sm:text-sm text-center z-10 p-4">
+              <Activity className="w-6 h-6 sm:w-8 sm:h-8 text-cyan-400 mx-auto mb-2 animate-bounce" />
+              <p>{isLoadingModel ? 'Loading MediaPipe Model...' : 'Tap "Live Camera" or "Upload" to start'}</p>
             </div>
           )}
         </div>
@@ -232,11 +232,11 @@ export default function App() {
 
             <div className="grid grid-cols-2 gap-3 text-center mb-4">
               <div className="bg-slate-950 p-3 rounded-lg border border-slate-800/80">
-                <span className="text-3xl font-extrabold text-cyan-400">{jabs}</span>
+                <span className="text-2xl sm:text-3xl font-extrabold text-cyan-400">{jabs}</span>
                 <p className="text-[10px] text-slate-400 mt-1">LEAD JABS</p>
               </div>
               <div className="bg-slate-950 p-3 rounded-lg border border-slate-800/80">
-                <span className="text-3xl font-extrabold text-indigo-400">{crosses}</span>
+                <span className="text-2xl sm:text-3xl font-extrabold text-indigo-400">{crosses}</span>
                 <p className="text-[10px] text-slate-400 mt-1">CROSSES</p>
               </div>
             </div>
@@ -275,6 +275,26 @@ export default function App() {
               <p className="text-xs leading-relaxed opacity-90">{aiAdvice.feedback}</p>
             </div>
           )}
+
+          {/* Soviet Benchmark Index */}
+          <div className="bg-slate-900 border border-slate-800 rounded-xl p-4 space-y-3">
+            <h3 className="text-xs text-slate-400 flex items-center gap-1 mb-2">
+              <Award className="w-4 h-4 text-amber-400" /> SOVIET METRIC BENCHMARKS
+            </h3>
+
+            <div>
+              <div className="flex justify-between text-xs mb-1">
+                <span className="text-slate-300">Lead Hand Dominance (Target: &gt;65%)</span>
+                <span className="text-cyan-400 font-bold">{leadRatio}%</span>
+              </div>
+              <div className="w-full bg-slate-950 h-2 rounded-full overflow-hidden">
+                <div
+                  className="bg-cyan-500 h-full rounded-full transition-all duration-300"
+                  style={{ width: `${leadRatio}%` }}
+                />
+              </div>
+            </div>
+          </div>
         </div>
       </div>
     </div>
