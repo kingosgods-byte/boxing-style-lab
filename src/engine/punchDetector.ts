@@ -14,44 +14,64 @@ export class SovietPunchAnalyzer {
   
   private prevLeftWrist: NormalizedLandmark | null = null;
   private prevRightWrist: NormalizedLandmark | null = null;
-  private prevTime: number = 0;
+  private lastTimestamp: number = 0;
 
-  // Calibrated for Bivol's compact Soviet mechanics
-  private readonly VELOCITY_THRESHOLD = 1.8;  // Spikes required to trigger
-  private readonly MIN_EXTENSION_ANGLE = 145; // Minimum elbow extension (degrees)
-  private readonly RETRACTION_ZONE = 0.25;    // Must return near shoulder before next punch
+  // Calibrated thresholds for real webcam streams
+  private readonly MIN_VISIBILITY = 0.65;      // Ignore flickering/low confidence joints
+  private readonly MIN_PUNCH_DISTANCE = 0.18;   // Minimum 18% screen extension (kills idle jitter)
+  private readonly VELOCITY_THRESHOLD = 0.45;   // True acceleration threshold
+  private readonly MIN_EXTENSION_ANGLE = 140;  // Elbow extension at apex
+  private readonly RETRACTION_ZONE = 0.22;     // Must return near guard box
 
   public processFrame(landmarks: NormalizedLandmark[], timestamp: number): PunchEvent | null {
     if (!landmarks || landmarks.length < 33) return null;
 
-    const dt = (timestamp - this.prevTime) / 1000;
-    this.prevTime = timestamp;
-    if (dt <= 0) return null;
+    // Fix 1: Ensure valid delta time (dt) in seconds (min 15ms frame gap)
+    if (!this.lastTimestamp) {
+      this.lastTimestamp = timestamp;
+      return null;
+    }
 
-    // MediaPipe pose indices: 
-    // Left: Shoulder=11, Elbow=13, Wrist=15
-    // Right: Shoulder=12, Elbow=14, Wrist=16
+    const dt = (timestamp - this.lastTimestamp) / 1000;
+    this.lastTimestamp = timestamp;
+
+    if (dt < 0.015 || dt > 0.5) return null; // Reject dropped frames or zero-dt spikes
+
+    // MediaPipe Landmarks
     const lShoulder = landmarks[11], lElbow = landmarks[13], lWrist = landmarks[15];
     const rShoulder = landmarks[12], rElbow = landmarks[14], rWrist = landmarks[16];
 
-    // Analyze Left Lead (Bivol Jab Engine)
-    const leftEvent = this.analyzeArm(
-      'left', lShoulder, lElbow, lWrist, 
-      this.prevLeftWrist, dt, this.leftArmState, 
-      (state) => { this.leftArmState = state; }
-    );
+    // Fix 2: Check Joint Visibility Confidence
+    const leftVisible = (lShoulder?.visibility ?? 1) > this.MIN_VISIBILITY &&
+                        (lElbow?.visibility ?? 1) > this.MIN_VISIBILITY &&
+                        (lWrist?.visibility ?? 1) > this.MIN_VISIBILITY;
 
-    // Analyze Right Hand (Cross)
-    const rightEvent = this.analyzeArm(
-      'right', rShoulder, rElbow, rWrist, 
-      this.prevRightWrist, dt, this.rightArmState, 
-      (state) => { this.rightArmState = state; }
-    );
+    const rightVisible = (rShoulder?.visibility ?? 1) > this.MIN_VISIBILITY &&
+                         (rElbow?.visibility ?? 1) > this.MIN_VISIBILITY &&
+                         (rWrist?.visibility ?? 1) > this.MIN_VISIBILITY;
+
+    let punchEvent: PunchEvent | null = null;
+
+    if (leftVisible) {
+      punchEvent = this.analyzeArm(
+        'left', lShoulder, lElbow, lWrist,
+        this.prevLeftWrist, dt, this.leftArmState,
+        (s) => { this.leftArmState = s; }
+      );
+    }
+
+    if (!punchEvent && rightVisible) {
+      punchEvent = this.analyzeArm(
+        'right', rShoulder, rElbow, rWrist,
+        this.prevRightWrist, dt, this.rightArmState,
+        (s) => { this.rightArmState = s; }
+      );
+    }
 
     this.prevLeftWrist = lWrist;
     this.prevRightWrist = rWrist;
 
-    return leftEvent || rightEvent;
+    return punchEvent;
   }
 
   private analyzeArm(
@@ -66,24 +86,31 @@ export class SovietPunchAnalyzer {
   ): PunchEvent | null {
     if (!prevWrist) return null;
 
-    // Relative velocity (isolates arm motion from footwork/torso shifts)
+    // Calculate actual 2D distance from shoulder to wrist
+    const currentDist = Math.hypot(wrist.x - shoulder.x, wrist.y - shoulder.y);
+    
+    // Displacement frame over frame (relative to shoulder to negate body swaying)
     const dx = (wrist.x - shoulder.x) - (prevWrist.x - shoulder.x);
     const dy = (wrist.y - shoulder.y) - (prevWrist.y - shoulder.y);
-    const dz = (wrist.z - shoulder.z) - (prevWrist.z - shoulder.z);
-    const velocity = Math.sqrt(dx * dx + dy * dy + dz * dz) / dt;
+    const displacement = Math.hypot(dx, dy);
 
+    // Filter micro-noise jitter while standing still
+    if (displacement < 0.01) return null;
+
+    const velocity = displacement / dt;
     const angle = this.calculateAngle(shoulder, elbow, wrist);
-    const distToShoulder = Math.hypot(wrist.x - shoulder.x, wrist.y - shoulder.y);
 
+    // State Machine logic with deadzone filters
     if (currentState === 'GUARD') {
-      if (velocity > this.VELOCITY_THRESHOLD && angle > 110) {
+      // Must have acceleration AND significant physical movement away from body
+      if (velocity > this.VELOCITY_THRESHOLD && currentDist > this.MIN_PUNCH_DISTANCE && angle > 115) {
         setState('EXTENDING');
       }
     } else if (currentState === 'EXTENDING') {
       if (angle >= this.MIN_EXTENSION_ANGLE) {
         setState('RETRACTING');
-        
-        const isStraight = Math.abs(wrist.x - shoulder.x) < 0.3;
+
+        const isStraight = Math.abs(wrist.x - shoulder.x) < 0.25;
         return {
           type: arm === 'left' ? (isStraight ? 'jab' : 'hook') : 'cross',
           arm,
@@ -93,7 +120,8 @@ export class SovietPunchAnalyzer {
         };
       }
     } else if (currentState === 'RETRACTING') {
-      if (distToShoulder < this.RETRACTION_ZONE || angle < 90) {
+      // Must return back to the guard box before resetting state
+      if (currentDist < this.RETRACTION_ZONE || angle < 95) {
         setState('GUARD');
       }
     }
