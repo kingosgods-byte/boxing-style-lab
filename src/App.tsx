@@ -2,11 +2,11 @@ import React, { useState, useRef, useEffect } from 'react';
 import { Target, Activity, RotateCcw, Camera, Upload, Settings, UserCheck, TrendingUp, X, Sliders, Volume2, VolumeX, Cpu, Flame } from 'lucide-react';
 import { PoseLandmarker, FilesetResolver } from '@mediapipe/tasks-vision';
 
-import { SovietPunchAnalyzer, PunchEvent } from './engine/punchDetector.ts';
-import { AICoachEngine, AIAdvice } from './engine/aiCoachEngine.ts';
-import { FIGHTER_STYLES, StyleProfile } from './engine/styleProfiles.ts';
-import { UserDataEngine, UserStats } from './engine/userDataEngine.ts';
-import { ComboDetector, ComboEvent } from './engine/comboDetector.ts';
+import { SovietPunchAnalyzer, PunchEvent } from './engine/punchDetector';
+import { AICoachEngine, AIAdvice } from './engine/aiCoachEngine';
+import { FIGHTER_STYLES, StyleProfile } from './engine/styleProfiles';
+import { UserDataEngine, UserStats } from './engine/userDataEngine';
+import { ComboDetector, ComboEvent } from './engine/comboDetector';
 
 type Theme = 'bivol' | 'ggg' | 'loma';
 
