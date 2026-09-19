@@ -28,7 +28,6 @@ export class AICoachEngine {
 
     const profile: StyleProfile = FIGHTER_STYLES[styleId] || FIGHTER_STYLES.bivol;
 
-    // Off-hand guard tracking
     const offWrist = type === 'jab' ? landmarks[16] : landmarks[15];
     const offShoulder = type === 'jab' ? landmarks[12] : landmarks[11];
     const userGuardDrop = Math.abs(offWrist.y - offShoulder.y);
@@ -39,12 +38,11 @@ export class AICoachEngine {
     if (extensionDiff > 10) score -= Math.min(40, extensionDiff * 2);
     if (userGuardDrop > profile.guardThresholdY) score -= 30;
 
-    // Personal progress adaptation hint
     let personalizedHint = '';
     if (userStats && userStats.samplesCount >= 10) {
       const pastAvg = type === 'jab' ? userStats.avgJabAngle : userStats.avgCrossAngle;
       if (elbowAngle > pastAvg + 3) {
-        personalizedHint = ` (+${Math.round(elbowAngle - pastAvg)}° better than your average!)`;
+        personalizedHint = ` (+${Math.round(elbowAngle - pastAvg)}° past your average!)`;
       }
     }
 
@@ -53,8 +51,8 @@ export class AICoachEngine {
     if (userGuardDrop > profile.guardThresholdY) {
       return {
         score: Math.max(20, Math.round(score)),
-        metricName: 'Guard Integrity',
-        feedback: `Guard dropped! Keep the opposite hand shielding your chin like ${profile.name}.`,
+        metricName: 'Guard Shield Deficit',
+        feedback: `Guard dropped! Shield your chin with your off-hand like ${profile.name}.`,
         severity: 'critical',
         timestamp: now
       };
@@ -64,7 +62,7 @@ export class AICoachEngine {
       return {
         score: Math.max(30, Math.round(score)),
         metricName: 'Extension Precision',
-        feedback: `Elbow hit ${Math.round(elbowAngle)}° (Target: ${profile.minExtensionAngle}°). Drive fully through.${personalizedHint}`,
+        feedback: `Extension reached ${Math.round(elbowAngle)}° (Benchmark for ${profile.name}: ${profile.minExtensionAngle}°). Fully snap into the target.${personalizedHint}`,
         severity: 'warning',
         timestamp: now
       };
@@ -72,8 +70,8 @@ export class AICoachEngine {
 
     return {
       score: Math.min(100, Math.round(score)),
-      metricName: 'Style Match',
-      feedback: `Excellent ${type.toUpperCase()}! Full kinetic extension aligned with ${profile.name}'s standards.${personalizedHint}`,
+      metricName: 'Archetype Precision',
+      feedback: `Flawless ${type.toUpperCase()} execution! Matched ${profile.name}'s kinematic mechanics and guard level.${personalizedHint}`,
       severity: 'good',
       timestamp: now
     };
