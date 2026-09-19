@@ -1,5 +1,16 @@
 import React from "react";
-import { createRoot } from "react-dom/client";
-import "./styles.css";
+import ReactDOM from "react-dom/client";
+
 import App from "./App";
-createRoot(document.getElementById("root")!).render(<React.StrictMode><App /></React.StrictMode>);
+import { installGlobalDiagnostics } from "./engine/diagnostics";
+import "./styles.css";
+
+installGlobalDiagnostics();
+
+ReactDOM.createRoot(
+  document.getElementById("root")!
+).render(
+  <React.StrictMode>
+    <App />
+  </React.StrictMode>
+);
