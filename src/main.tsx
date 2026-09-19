@@ -3,7 +3,7 @@ import ReactDOM from "react-dom/client";
 
 import App from "./App";
 import { installGlobalDiagnostics } from "./engine/diagnostics";
-import "./styles.css";
+import "./index.css"; // <-- Change 'styles.css' to 'index.css'
 
 installGlobalDiagnostics();
 
