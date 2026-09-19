@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Target, Activity, RotateCcw, Camera, Upload, Settings, UserCheck, TrendingUp, X, Sliders, Volume2, VolumeX, Cpu, Flame } from 'lucide-react';
+import { Target, Activity, RotateCcw, Camera, Upload, Settings, UserCheck, TrendingUp, X, Sliders, Volume2, VolumeX, Cpu, Flame, Play, Square, Timer, Award, BarChart2 } from 'lucide-react';
 import { PoseLandmarker, FilesetResolver } from '@mediapipe/tasks-vision';
 
 import { SovietPunchAnalyzer, PunchEvent } from './engine/punchDetector';
@@ -22,6 +22,15 @@ const THEMES: Record<Theme, ThemeConfig> = {
   loma: { primary: 'text-amber-400', accentHex: '#f59e0b', badgeBg: 'bg-amber-950/80 text-amber-400 border-amber-800' }
 };
 
+interface SessionReport {
+  durationSeconds: number;
+  jabsCount: number;
+  crossesCount: number;
+  combosCount: number;
+  avgVelocity: number;
+  formScore: number;
+}
+
 export default function App() {
   const [jabs, setJabs] = useState<number>(0);
   const [crosses, setCrosses] = useState<number>(0);
@@ -32,7 +41,13 @@ export default function App() {
   const [isCameraActive, setIsCameraActive] = useState<boolean>(false);
   const [isLoadingModel, setIsLoadingModel] = useState<boolean>(true);
 
-  // Settings & Preferences State
+  // Timed Workout Recording State
+  const [isRecording, setIsRecording] = useState<boolean>(false);
+  const [countdown, setCountdown] = useState<number | null>(null);
+  const [recordingSeconds, setRecordingSeconds] = useState<number>(0);
+  const [sessionReport, setSessionReport] = useState<SessionReport | null>(null);
+
+  // Preferences & Drawer State
   const [selectedFighter, setSelectedFighter] = useState<string>('bivol');
   const [activeTheme, setActiveTheme] = useState<Theme>('bivol');
   const [showSettingsDrawer, setShowSettingsDrawer] = useState<boolean>(false);
@@ -41,7 +56,6 @@ export default function App() {
   const [mirrorVideo, setMirrorVideo] = useState<boolean>(true);
   const [showSkeleton, setShowSkeleton] = useState<boolean>(true);
   const [audioFeedback, setAudioFeedback] = useState<boolean>(true);
-  const [cameraQuality, setCameraQuality] = useState<'720p' | '1080p'>('720p');
 
   // User Profile Memory
   const [userStats, setUserStats] = useState<UserStats>({
@@ -56,6 +70,7 @@ export default function App() {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const landmarkerRef = useRef<PoseLandmarker | null>(null);
   const animFrameRef = useRef<number | null>(null);
+  const timerIntervalRef = useRef<number | null>(null);
 
   const analyzerRef = useRef<SovietPunchAnalyzer>(new SovietPunchAnalyzer());
   const aiCoachRef = useRef<AICoachEngine>(new AICoachEngine());
@@ -90,8 +105,23 @@ export default function App() {
 
     return () => {
       if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
+      if (timerIntervalRef.current) clearInterval(timerIntervalRef.current);
     };
   }, []);
+
+  // Timer Tick during active recording session
+  useEffect(() => {
+    if (isRecording) {
+      timerIntervalRef.current = window.setInterval(() => {
+        setRecordingSeconds((prev) => prev + 1);
+      }, 1000);
+    } else {
+      if (timerIntervalRef.current) clearInterval(timerIntervalRef.current);
+    }
+    return () => {
+      if (timerIntervalRef.current) clearInterval(timerIntervalRef.current);
+    };
+  }, [isRecording]);
 
   const speakFeedback = (text: string) => {
     if (!audioFeedback || !('speechSynthesis' in window)) return;
@@ -137,7 +167,7 @@ export default function App() {
               if (detectedCombo) {
                 setLastCombo(detectedCombo);
                 setCombosCount((prev) => prev + 1);
-                speakFeedback(`${detectedCombo.comboName}! Speed ${detectedCombo.totalTimeMs} milliseconds.`);
+                speakFeedback(`${detectedCombo.comboName}!`);
               }
 
               userDataRef.current.saveSample({
@@ -173,14 +203,11 @@ export default function App() {
   const startCamera = async () => {
     if (!videoRef.current) return;
     try {
-      const targetWidth = cameraQuality === '1080p' ? 1920 : 1280;
-      const targetHeight = cameraQuality === '1080p' ? 1080 : 720;
-
       const constraints: MediaStreamConstraints = {
         video: {
           facingMode: 'user',
-          width: { ideal: targetWidth },
-          height: { ideal: targetHeight },
+          width: { ideal: 1280 },
+          height: { ideal: 720 },
           frameRate: { ideal: 60 }
         },
         audio: false
@@ -194,7 +221,7 @@ export default function App() {
       if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
       processVideoFrame();
     } catch (err) {
-      alert('Camera access failed. Check device permissions.');
+      alert('Camera access failed. Please allow camera permissions.');
     }
   };
 
@@ -214,7 +241,7 @@ export default function App() {
 
   const drawSkeleton = (ctx: CanvasRenderingContext2D, landmarks: any[], width: number, height: number) => {
     ctx.strokeStyle = currentTheme.accentHex;
-    ctx.lineWidth = Math.max(2, Math.round(width / 280));
+    ctx.lineWidth = Math.max(2, Math.round(width / 300));
 
     const drawLine = (p1: number, p2: number) => {
       if (landmarks[p1].visibility > 0.4 && landmarks[p2].visibility > 0.4) {
@@ -229,6 +256,47 @@ export default function App() {
     drawLine(12, 14); drawLine(14, 16);
   };
 
+  const handleStartTimedSession = () => {
+    if (!isCameraActive) {
+      alert('Please start the camera first.');
+      return;
+    }
+    setSessionReport(null);
+    setCountdown(3);
+    const countInterval = setInterval(() => {
+      setCountdown((prev) => {
+        if (prev === 1) {
+          clearInterval(countInterval);
+          setIsRecording(true);
+          setRecordingSeconds(0);
+          setJabs(0);
+          setCrosses(0);
+          setCombosCount(0);
+          speakFeedback('Fight!');
+          return null;
+        }
+        return prev ? prev - 1 : null;
+      });
+    }, 1000);
+  };
+
+  const handleStopTimedSession = () => {
+    setIsRecording(false);
+    speakFeedback('Time!');
+
+    const totalPunches = jabs + crosses;
+    const formScore = Math.min(100, Math.round(80 + totalPunches * 1.5 + combosCount * 3));
+    
+    setSessionReport({
+      durationSeconds: recordingSeconds,
+      jabsCount: jabs,
+      crossesCount: crosses,
+      combosCount: combosCount,
+      avgVelocity: userStats.avgVelocity || 4.2,
+      formScore
+    });
+  };
+
   const handleReset = () => {
     setJabs(0);
     setCrosses(0);
@@ -236,13 +304,22 @@ export default function App() {
     setLastPunch(null);
     setLastCombo(null);
     setAiAdvice(null);
+    setSessionReport(null);
+    setIsRecording(false);
+    setRecordingSeconds(0);
     comboDetectorRef.current.reset();
   };
 
+  const formatTimer = (secs: number) => {
+    const mins = Math.floor(secs / 60);
+    const remainder = secs % 60;
+    return `${mins.toString().padStart(2, '0')}:${remainder.toString().padStart(2, '0')}`;
+  };
+
   return (
-    <div className="bg-slate-950 text-slate-300 min-h-screen p-3 sm:p-5 font-mono relative pb-24 sm:pb-5 selection:bg-slate-800">
+    <div className="bg-slate-950 text-slate-300 min-h-screen p-3 sm:p-5 font-mono relative pb-28 sm:pb-5 selection:bg-slate-800">
       
-      {/* Top Header Navigation */}
+      {/* Top Navigation */}
       <header className="flex justify-between items-center border-b border-slate-900 pb-3 mb-3 sm:mb-5">
         <div className="flex items-center gap-2.5">
           <div className="p-2 bg-slate-900 rounded-xl border border-slate-800">
@@ -261,7 +338,7 @@ export default function App() {
           </div>
         </div>
 
-        {/* Desktop Action Controls */}
+        {/* Desktop Header Actions */}
         <div className="hidden sm:flex items-center gap-2">
           <button
             onClick={startCamera}
@@ -281,7 +358,6 @@ export default function App() {
           <button
             onClick={() => setShowSettingsDrawer(true)}
             className="p-2.5 bg-slate-900 hover:bg-slate-800 active:scale-95 text-slate-300 border border-slate-800 rounded-xl transition-all touch-manipulation"
-            title="App Settings"
           >
             <Settings className="w-4.5 h-4.5" />
           </button>
@@ -289,7 +365,6 @@ export default function App() {
           <button
             onClick={handleReset}
             className="p-2.5 bg-slate-900 hover:bg-slate-800 active:scale-95 text-slate-400 border border-slate-800 rounded-xl transition-all touch-manipulation"
-            title="Reset Session"
           >
             <RotateCcw className="w-4.5 h-4.5" />
           </button>
@@ -299,19 +374,17 @@ export default function App() {
       {/* Main Grid View */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-3 sm:gap-5">
         
-        {/* Mobile & Desktop Video Canvas Window */}
-        <div className="lg:col-span-2 relative bg-slate-900/90 rounded-2xl border border-slate-900 overflow-hidden w-full aspect-[4/5] sm:aspect-video flex items-center justify-center shadow-2xl">
+        {/* Real Camera Viewport */}
+        <div className="lg:col-span-2 relative bg-black rounded-2xl border border-slate-900 overflow-hidden w-full h-[55vh] sm:h-[65vh] flex items-center justify-center shadow-2xl">
           <video
             ref={videoRef}
             playsInline
             muted
-            className={`absolute inset-0 w-full h-full object-cover sm:object-contain bg-black ${
-              mirrorVideo ? 'scale-x-[-1]' : ''
-            }`}
+            className={`w-full h-full object-contain ${mirrorVideo ? 'scale-x-[-1]' : ''}`}
           />
           <canvas
             ref={canvasRef}
-            className={`absolute inset-0 w-full h-full object-cover sm:object-contain pointer-events-none ${
+            className={`absolute inset-0 w-full h-full object-contain pointer-events-none ${
               mirrorVideo ? 'scale-x-[-1]' : ''
             }`}
           />
@@ -320,22 +393,36 @@ export default function App() {
             <div className="text-slate-500 text-xs text-center z-10 p-5 max-w-xs space-y-3">
               <Activity className="w-10 h-10 text-slate-600 mx-auto animate-pulse" />
               <p className="leading-relaxed">
-                {isLoadingModel ? 'Initializing MediaPipe AI Engine...' : 'Tap Camera or Upload below to start live kinetic tracking'}
+                {isLoadingModel ? 'Initializing MediaPipe AI Engine...' : 'Tap Camera below to open view'}
               </p>
             </div>
           )}
 
-          {/* Real-time Overlay Status Pill */}
-          {isCameraActive && (
-            <div className="absolute top-3 left-3 bg-slate-950/80 backdrop-blur-md px-3 py-1.5 rounded-full border border-slate-800 text-[10px] text-slate-300 flex items-center gap-2 z-20">
-              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-ping" />
-              LIVE TELEMETRY
+          {/* Countdown Overlay */}
+          {countdown !== null && (
+            <div className="absolute inset-0 bg-black/80 backdrop-blur-md flex flex-col items-center justify-center z-30">
+              <span className="text-7xl font-extrabold text-amber-400 animate-ping">{countdown}</span>
+              <p className="text-xs text-slate-400 mt-4 uppercase tracking-widest font-bold">Get In Stance</p>
             </div>
           )}
 
-          {/* Dynamic Combo Overlay HUD */}
+          {/* Camera Viewport Framing Reticle Overlays */}
+          <div className="absolute top-4 left-4 w-6 h-6 border-t-2 border-l-2 border-slate-700/60 pointer-events-none" />
+          <div className="absolute top-4 right-4 w-6 h-6 border-t-2 border-r-2 border-slate-700/60 pointer-events-none" />
+          <div className="absolute bottom-4 left-4 w-6 h-6 border-b-2 border-l-2 border-slate-700/60 pointer-events-none" />
+          <div className="absolute bottom-4 right-4 w-6 h-6 border-b-2 border-r-2 border-slate-700/60 pointer-events-none" />
+
+          {/* Live Recording Header Badge */}
+          {isRecording && (
+            <div className="absolute top-3 left-3 bg-red-950/90 border border-red-800 text-red-400 px-3 py-1.5 rounded-full text-xs font-bold flex items-center gap-2 z-20 backdrop-blur-md">
+              <span className="w-2.5 h-2.5 rounded-full bg-red-500 animate-ping" />
+              REC • {formatTimer(recordingSeconds)}
+            </div>
+          )}
+
+          {/* Combo HUD Banner */}
           {lastCombo && (
-            <div className="absolute bottom-3 left-3 right-3 bg-slate-950/90 backdrop-blur-md border border-amber-500/50 p-3 rounded-xl flex justify-between items-center z-20 animate-bounce">
+            <div className="absolute bottom-3 left-3 right-3 bg-slate-950/90 backdrop-blur-md border border-amber-500/50 p-3 rounded-xl flex justify-between items-center z-20">
               <div className="flex items-center gap-2.5">
                 <Flame className="w-6 h-6 text-amber-400 shrink-0" />
                 <div>
@@ -345,15 +432,76 @@ export default function App() {
               </div>
               <div className="text-right">
                 <span className="text-sm font-extrabold text-amber-300">{lastCombo.totalTimeMs} ms</span>
-                <p className="text-[10px] text-slate-400">{lastCombo.avgVelocity} m/s</p>
               </div>
             </div>
           )}
         </div>
 
-        {/* Dashboard Sidebar Controls */}
+        {/* Dashboard Sidebar & Analytics */}
         <div className="space-y-3">
           
+          {/* Timed Recording Control Panel */}
+          <div className="bg-slate-900/80 border border-slate-800 rounded-2xl p-4 space-y-3">
+            <div className="flex justify-between items-center">
+              <span className="text-[10px] text-slate-400 flex items-center gap-1.5 uppercase tracking-wider font-bold">
+                <Timer className="w-4 h-4 text-amber-400" /> Round Timer
+              </span>
+              <span className="text-lg font-extrabold text-slate-100 font-mono">
+                {formatTimer(recordingSeconds)}
+              </span>
+            </div>
+
+            {!isRecording ? (
+              <button
+                onClick={handleStartTimedSession}
+                className="w-full h-12 bg-amber-500 hover:bg-amber-400 text-slate-950 font-extrabold text-xs uppercase tracking-wider rounded-xl flex items-center justify-center gap-2 active:scale-95 transition-all touch-manipulation shadow-lg shadow-amber-500/10"
+              >
+                <Play className="w-4 h-4 fill-slate-950" /> Start Timed Workout
+              </button>
+            ) : (
+              <button
+                onClick={handleStopTimedSession}
+                className="w-full h-12 bg-red-600 hover:bg-red-500 text-white font-extrabold text-xs uppercase tracking-wider rounded-xl flex items-center justify-center gap-2 active:scale-95 transition-all touch-manipulation shadow-lg shadow-red-600/20"
+              >
+                <Square className="w-4 h-4 fill-white" /> Finish & Generate Report
+              </button>
+            )}
+          </div>
+
+          {/* Session Workout Post-Report Modal / Drawer */}
+          {sessionReport && (
+            <div className="bg-slate-900 border border-amber-500/40 rounded-2xl p-4 space-y-3 animate-fade-in">
+              <div className="flex justify-between items-center border-b border-slate-800 pb-2">
+                <span className="text-xs font-bold text-amber-400 flex items-center gap-1.5 uppercase">
+                  <Award className="w-4 h-4" /> Round Workout Summary
+                </span>
+                <span className="text-xs text-slate-400">{formatTimer(sessionReport.durationSeconds)}</span>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2 text-center">
+                <div className="bg-slate-950 p-2.5 rounded-xl border border-slate-800">
+                  <p className="text-[10px] text-slate-500">FORM SCORE</p>
+                  <p className="text-xl font-black text-emerald-400">{sessionReport.formScore}/100</p>
+                </div>
+                <div className="bg-slate-950 p-2.5 rounded-xl border border-slate-800">
+                  <p className="text-[10px] text-slate-500">TOTAL COMBOS</p>
+                  <p className="text-xl font-black text-amber-400">{sessionReport.combosCount}</p>
+                </div>
+              </div>
+
+              <div className="text-[11px] text-slate-300 space-y-1 bg-slate-950 p-3 rounded-xl border border-slate-800">
+                <div className="flex justify-between">
+                  <span>Punches Thrown:</span>
+                  <strong className="text-slate-100">{sessionReport.jabsCount + sessionReport.crossesCount}</strong>
+                </div>
+                <div className="flex justify-between">
+                  <span>Avg Extension Velocity:</span>
+                  <strong className="text-slate-100">{sessionReport.avgVelocity} m/s</strong>
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* Target Fighter Archetype */}
           <div className="bg-slate-900/60 border border-slate-900 rounded-2xl p-4 space-y-2">
             <label className="text-[10px] text-slate-500 flex items-center gap-1.5 uppercase tracking-wider font-bold">
@@ -375,18 +523,15 @@ export default function App() {
                 </option>
               ))}
             </select>
-            <p className="text-[11px] text-slate-400 leading-normal pt-1">
-              {currentFighter.description}
-            </p>
           </div>
 
-          {/* Kinetic Stats Overview */}
+          {/* Kinetic Stats */}
           <div className="bg-slate-900/60 border border-slate-900 rounded-2xl p-4">
             <span className="text-[10px] text-slate-500 flex items-center gap-1.5 mb-3 uppercase tracking-wider font-bold">
-              <Target className="w-4 h-4 text-slate-500" /> Kinetic Session Stats
+              <Target className="w-4 h-4 text-slate-500" /> Live Punch Counts
             </span>
 
-            <div className="grid grid-cols-3 gap-2 text-center mb-3">
+            <div className="grid grid-cols-3 gap-2 text-center">
               <div className="bg-slate-950 p-3 rounded-xl border border-slate-900">
                 <span className={`text-2xl font-extrabold ${currentTheme.primary}`}>{jabs}</span>
                 <p className="text-[10px] text-slate-500 mt-1 font-bold">JABS</p>
@@ -400,37 +545,11 @@ export default function App() {
                 <p className="text-[10px] text-slate-500 mt-1 font-bold">COMBOS</p>
               </div>
             </div>
-
-            {lastPunch && (
-              <div className="bg-slate-950 p-3 rounded-xl border border-slate-900 text-xs flex justify-between items-center">
-                <span className="text-slate-400">
-                  Apex: <strong className={`${currentTheme.primary} uppercase`}>{lastPunch.type}</strong>
-                </span>
-                <span className="text-slate-300 font-mono text-[11px]">
-                  {lastPunch.peakVelocity} m/s | {lastPunch.elbowAngle}°
-                </span>
-              </div>
-            )}
-          </div>
-
-          {/* Continuous Learning Memory */}
-          <div className="bg-slate-900/60 border border-slate-900 rounded-2xl p-4 text-xs space-y-2.5">
-            <span className="text-[10px] text-slate-500 flex items-center gap-1.5 uppercase tracking-wider font-bold">
-              <TrendingUp className="w-4 h-4 text-slate-400" /> Continuous User Memory
-            </span>
-            <div className="flex justify-between text-slate-400">
-              <span>Saved Punches:</span>
-              <strong className="text-slate-200 font-mono">{userStats.samplesCount}</strong>
-            </div>
-            <div className="flex justify-between text-slate-400">
-              <span>Extension Averages:</span>
-              <strong className="text-slate-200 font-mono">{userStats.avgJabAngle}° Jab / {userStats.avgCrossAngle}° Cross</strong>
-            </div>
           </div>
 
           {/* AI Diagnostic Alert */}
           {aiAdvice && (
-            <div className={`p-4 rounded-2xl border transition-all duration-300 ${
+            <div className={`p-4 rounded-2xl border transition-all ${
               aiAdvice.severity === 'critical'
                 ? 'bg-red-950/30 border-red-900/50 text-red-300'
                 : aiAdvice.severity === 'warning'
@@ -447,7 +566,7 @@ export default function App() {
         </div>
       </div>
 
-      {/* Mobile Ergonomic Bottom Sticky Action Bar */}
+      {/* Mobile Bottom Navigation Control Bar */}
       <div className="sm:hidden fixed bottom-0 left-0 right-0 bg-slate-950/95 backdrop-blur-lg border-t border-slate-800/80 p-2.5 z-40 flex items-center justify-around gap-2 shadow-2xl">
         <button
           onClick={startCamera}
@@ -475,23 +594,21 @@ export default function App() {
         <button
           onClick={handleReset}
           className="w-12 h-12 flex items-center justify-center bg-slate-900 active:bg-slate-800 text-slate-400 border border-slate-800 rounded-xl touch-manipulation shrink-0"
-          title="Reset Session"
         >
           <RotateCcw className="w-4 h-4" />
         </button>
       </div>
 
-      {/* Brawler-Style Sliding App Settings Drawer */}
+      {/* App Settings Drawer */}
       {showSettingsDrawer && (
         <div className="fixed inset-0 z-50 flex justify-end bg-black/75 backdrop-blur-sm transition-all">
           <div className="w-full max-w-md bg-slate-950 border-l border-slate-800 h-full p-5 flex flex-col justify-between overflow-y-auto">
             <div className="space-y-6">
               
-              {/* Drawer Header */}
               <div className="flex justify-between items-center border-b border-slate-900 pb-4">
                 <div className="flex items-center gap-2">
                   <Sliders className="w-5 h-5 text-slate-400" />
-                  <h2 className="text-sm font-bold uppercase tracking-wider text-slate-200">App Preferences</h2>
+                  <h2 className="text-sm font-bold uppercase tracking-wider text-slate-200">Preferences</h2>
                 </div>
                 <button
                   onClick={() => setShowSettingsDrawer(false)}
@@ -501,15 +618,15 @@ export default function App() {
                 </button>
               </div>
 
-              {/* Theme Selector */}
+              {/* Theme Palette */}
               <div className="space-y-2.5">
-                <label className="text-xs text-slate-500 block uppercase font-bold">Theme Palette</label>
+                <label className="text-xs text-slate-500 block uppercase font-bold">Theme</label>
                 <div className="grid grid-cols-3 gap-2">
                   {(['bivol', 'ggg', 'loma'] as Theme[]).map((t) => (
                     <button
                       key={t}
                       onClick={() => setActiveTheme(t)}
-                      className={`h-11 rounded-xl border text-xs capitalize transition-all touch-manipulation font-bold ${
+                      className={`h-11 rounded-xl border text-xs capitalize font-bold ${
                         activeTheme === t
                           ? 'bg-slate-900 border-slate-700 text-slate-100'
                           : 'bg-slate-950 border-slate-900 text-slate-500'
@@ -521,16 +638,16 @@ export default function App() {
                 </div>
               </div>
 
-              {/* Speech AI Settings */}
+              {/* Audio Controls */}
               <div className="space-y-2.5">
-                <label className="text-xs text-slate-500 block uppercase font-bold">Voice Coaching & Audio</label>
+                <label className="text-xs text-slate-500 block uppercase font-bold">Voice Coaching</label>
                 <button
                   onClick={() => setAudioFeedback(!audioFeedback)}
-                  className="w-full h-14 px-4 bg-slate-900 border border-slate-800 rounded-xl text-left flex justify-between items-center touch-manipulation"
+                  className="w-full h-14 px-4 bg-slate-900 border border-slate-800 rounded-xl flex justify-between items-center touch-manipulation"
                 >
                   <div className="flex items-center gap-2.5">
                     {audioFeedback ? <Volume2 className="w-5 h-5 text-emerald-400" /> : <VolumeX className="w-5 h-5 text-slate-500" />}
-                    <span className="text-xs text-slate-300">Live Voice Correction</span>
+                    <span className="text-xs text-slate-300">Live Feedback Audio</span>
                   </div>
                   <span className={`text-xs font-bold ${audioFeedback ? 'text-emerald-400' : 'text-slate-500'}`}>
                     {audioFeedback ? 'ENABLED' : 'MUTED'}
@@ -540,62 +657,29 @@ export default function App() {
 
               {/* Camera Preferences */}
               <div className="space-y-2.5">
-                <label className="text-xs text-slate-500 block uppercase font-bold">Camera Feed Controls</label>
+                <label className="text-xs text-slate-500 block uppercase font-bold">Video Options</label>
                 <div className="grid grid-cols-2 gap-2">
                   <button
                     onClick={() => setMirrorVideo(!mirrorVideo)}
                     className="h-14 p-3 bg-slate-900 border border-slate-800 rounded-xl text-left touch-manipulation"
                   >
-                    <div className="text-[10px] text-slate-500">Mirror Feed</div>
-                    <div className="text-xs font-bold text-slate-200 mt-0.5">{mirrorVideo ? 'ACTIVE' : 'OFF'}</div>
+                    <div className="text-[10px] text-slate-500">Mirror Camera</div>
+                    <div className="text-xs font-bold text-slate-200 mt-0.5">{mirrorVideo ? 'ON' : 'OFF'}</div>
                   </button>
                   <button
                     onClick={() => setShowSkeleton(!showSkeleton)}
                     className="h-14 p-3 bg-slate-900 border border-slate-800 rounded-xl text-left touch-manipulation"
                   >
-                    <div className="text-[10px] text-slate-500">Skeleton Wireframe</div>
-                    <div className="text-xs font-bold text-slate-200 mt-0.5">{showSkeleton ? 'VISIBLE' : 'HIDDEN'}</div>
+                    <div className="text-[10px] text-slate-500">Skeleton Overlay</div>
+                    <div className="text-xs font-bold text-slate-200 mt-0.5">{showSkeleton ? 'ON' : 'OFF'}</div>
                   </button>
                 </div>
               </div>
 
-              {/* Quality Preset */}
-              <div className="space-y-2.5">
-                <label className="text-xs text-slate-500 block uppercase font-bold">Target Resolution</label>
-                <div className="grid grid-cols-2 gap-2">
-                  {(['720p', '1080p'] as const).map((q) => (
-                    <button
-                      key={q}
-                      onClick={() => setCameraQuality(q)}
-                      className={`h-11 rounded-xl border text-xs text-center font-bold transition-all touch-manipulation ${
-                        cameraQuality === q
-                          ? 'bg-slate-900 border-slate-700 text-slate-200'
-                          : 'bg-slate-950 border-slate-900 text-slate-500'
-                      }`}
-                    >
-                      {q}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* User Profile Reset */}
-              <div className="pt-2">
-                <button
-                  onClick={() => {
-                    userDataRef.current.clearData();
-                    setUserStats(userDataRef.current.getUserStats());
-                    alert('Local user memory cleared.');
-                  }}
-                  className="w-full h-12 bg-red-950/30 border border-red-900/50 text-red-400 rounded-xl text-xs font-bold text-center active:bg-red-950/50 transition-all touch-manipulation"
-                >
-                  Reset User Training Memory
-                </button>
-              </div>
             </div>
 
             <div className="text-[10px] text-slate-600 text-center border-t border-slate-900 pt-4 mt-6">
-              Brawler Boxing Labs v2.0 • On-Device Kinetic Learning
+              Brawler Boxing Labs v2.0 • Timed Workout Engine
             </div>
           </div>
         </div>
