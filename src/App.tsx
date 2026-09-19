@@ -1,4 +1,11 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ChangeEvent,
+} from "react";
+
 import {
   Camera,
   Play,
@@ -11,10 +18,12 @@ import {
   Upload,
   Video,
 } from "lucide-react";
+
 import { MediaPipeTracker } from "./tracking/MediaPipeTracker";
 import { analyzePose, detectPunch } from "./engine/analyzer";
 import { coach, compareStyle, STYLES } from "./engine/coach";
 import { Landmark, Metrics, Punch } from "./types";
+
 import MetricCard from "./components/MetricCard";
 import CoachPanel from "./components/CoachPanel";
 import SkeletonOverlay from "./components/SkeletonOverlay";
@@ -35,21 +44,43 @@ const empty: Metrics = {
 
 export default function App() {
   const video = useRef<HTMLVideoElement>(null);
+
   const raf = useRef<number>(0);
+
   const tracker = useRef(new MediaPipeTracker());
+
   const previous = useRef<Landmark[] | null>(null);
   const previousTime = useRef<number | null>(null);
+
   const videoUrl = useRef<string | null>(null);
+
+  const modeRef = useRef<"idle" | "camera" | "upload">("idle");
+  const runningRef = useRef(false);
+  const readyRef = useRef(false);
 
   const [running, setRunning] = useState(false);
   const [ready, setReady] = useState(false);
-  const [landmarks, setLandmarks] = useState<Landmark[] | null>(null);
-  const [metrics, setMetrics] = useState<Metrics>(empty);
-  const [styleKey, setStyleKey] = useState("bivol");
-  const [lastPunch, setLastPunch] = useState<Punch>();
-  const [error, setError] = useState("");
-  const [mode, setMode] = useState<"idle" | "camera" | "upload">("idle");
-  const [videoName, setVideoName] = useState("");
+
+  const [landmarks, setLandmarks] =
+    useState<Landmark[] | null>(null);
+
+  const [metrics, setMetrics] =
+    useState<Metrics>(empty);
+
+  const [styleKey, setStyleKey] =
+    useState("bivol");
+
+  const [lastPunch, setLastPunch] =
+    useState<Punch>();
+
+  const [error, setError] =
+    useState("");
+
+  const [mode, setMode] =
+    useState<"idle" | "camera" | "upload">("idle");
+
+  const [videoName, setVideoName] =
+    useState("");
 
   const style = STYLES[styleKey];
 
@@ -65,10 +96,14 @@ export default function App() {
 
   useEffect(() => {
     return () => {
-      if (raf.current) cancelAnimationFrame(raf.current);
+      if (raf.current) {
+        cancelAnimationFrame(raf.current);
+      }
 
-      const stream = video.current?.srcObject as MediaStream | null;
-      stream?.getTracks().forEach((t) => t.stop());
+      const stream =
+        video.current?.srcObject as MediaStream | null;
+
+      stream?.getTracks().forEach((track) => track.stop());
 
       if (videoUrl.current) {
         URL.revokeObjectURL(videoUrl.current);
@@ -77,62 +112,110 @@ export default function App() {
   }, []);
 
   async function initializeTracker() {
-    if (!ready) {
-      await tracker.current.init();
-      setReady(true);
+    if (readyRef.current) return;
+
+    await tracker.current.init();
+
+    readyRef.current = true;
+    setReady(true);
+  }
+
+  function resetAnalysisOnly() {
+    setMetrics(empty);
+    setLastPunch(undefined);
+    setLandmarks(null);
+
+    previous.current = null;
+    previousTime.current = null;
+  }
+
+  function stopProcessing() {
+    runningRef.current = false;
+
+    if (raf.current) {
+      cancelAnimationFrame(raf.current);
+      raf.current = 0;
+    }
+
+    if (video.current) {
+      video.current.pause();
+    }
+
+    const stream =
+      video.current?.srcObject as MediaStream | null;
+
+    if (stream) {
+      stream.getTracks().forEach((track) => track.stop());
     }
   }
 
   async function startCamera() {
     try {
       setError("");
+
       stopProcessing();
 
       if (!video.current) return;
 
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: {
-          width: 1280,
-          height: 720,
-          facingMode: "user",
-        },
-        audio: false,
-      });
+      const stream =
+        await navigator.mediaDevices.getUserMedia({
+          video: {
+            width: 1280,
+            height: 720,
+            facingMode: "user",
+          },
+          audio: false,
+        });
 
       video.current.srcObject = stream;
       video.current.removeAttribute("controls");
+      video.current.removeAttribute("src");
 
-      await video.current.play();
+      modeRef.current = "camera";
+      runningRef.current = true;
 
-      await initializeTracker();
-
-      resetAnalysisOnly();
       setMode("camera");
       setRunning(true);
 
+      resetAnalysisOnly();
+
+      await initializeTracker();
+
+      await video.current.play();
+
+      previousTime.current = null;
+
       loop();
     } catch (e) {
+      runningRef.current = false;
+
+      setRunning(false);
+
       setError(
-        "Camera or model initialization failed. Use HTTPS/localhost and allow camera access."
+        "Camera or pose model failed to initialize. Check camera permission and internet access."
       );
     }
   }
 
   async function handleVideoUpload(
-    event: React.ChangeEvent<HTMLInputElement>
+    event: ChangeEvent<HTMLInputElement>
   ) {
     const file = event.target.files?.[0];
+
     if (!file || !video.current) return;
 
     try {
       setError("");
+
       stopProcessing();
 
       if (videoUrl.current) {
         URL.revokeObjectURL(videoUrl.current);
+        videoUrl.current = null;
       }
 
       const url = URL.createObjectURL(file);
+
       videoUrl.current = url;
 
       video.current.srcObject = null;
@@ -141,69 +224,106 @@ export default function App() {
       video.current.muted = true;
       video.current.playsInline = true;
 
-      setVideoName(file.name);
-      resetAnalysisOnly();
+      modeRef.current = "upload";
+      runningRef.current = false;
+
       setMode("upload");
+      setRunning(false);
+      setVideoName(file.name);
+
+      resetAnalysisOnly();
+
+      video.current.load();
+
+      await new Promise<void>((resolve, reject) => {
+        const currentVideo = video.current;
+
+        if (!currentVideo) {
+          reject(new Error("Video element unavailable."));
+          return;
+        }
+
+        const onLoaded = () => {
+          cleanup();
+          resolve();
+        };
+
+        const onError = () => {
+          cleanup();
+          reject(new Error("Video could not be loaded."));
+        };
+
+        const cleanup = () => {
+          currentVideo.removeEventListener(
+            "loadeddata",
+            onLoaded
+          );
+
+          currentVideo.removeEventListener(
+            "error",
+            onError
+          );
+        };
+
+        currentVideo.addEventListener(
+          "loadeddata",
+          onLoaded
+        );
+
+        currentVideo.addEventListener(
+          "error",
+          onError
+        );
+      });
 
       await initializeTracker();
 
+      previous.current = null;
+      previousTime.current = null;
+
       await video.current.play();
 
+      runningRef.current = true;
       setRunning(true);
+
       loop();
     } catch (e) {
+      runningRef.current = false;
+
       setRunning(false);
+
       setError(
-        "Video could not be loaded or the analysis model could not initialize."
+        "The video loaded, but pose analysis could not start. Check your internet connection and try again."
       );
     }
   }
 
-  function stopProcessing() {
-    if (raf.current) {
-      cancelAnimationFrame(raf.current);
-      raf.current = 0;
-    }
-
-    const stream = video.current?.srcObject as MediaStream | null;
-
-    if (stream) {
-      stream.getTracks().forEach((t) => t.stop());
-    }
-  }
-
   function stop() {
+    stopProcessing();
+
     setRunning(false);
 
-    if (raf.current) {
-      cancelAnimationFrame(raf.current);
-      raf.current = 0;
-    }
-
-    const stream = video.current?.srcObject as MediaStream | null;
-    stream?.getTracks().forEach((t) => t.stop());
-
-    if (video.current && mode === "camera") {
+    if (modeRef.current === "camera" && video.current) {
       video.current.srcObject = null;
     }
   }
 
-  function resetAnalysisOnly() {
-    setMetrics(empty);
-    setLastPunch(undefined);
-    setLandmarks(null);
-    previous.current = null;
-    previousTime.current = null;
-  }
-
   function reset() {
-    stop();
+    stopProcessing();
+
+    modeRef.current = "idle";
+    runningRef.current = false;
+
+    setMode("idle");
+    setRunning(false);
 
     resetAnalysisOnly();
-    setMode("idle");
+
     setVideoName("");
+    setError("");
 
     if (video.current) {
+      video.current.srcObject = null;
       video.current.removeAttribute("src");
       video.current.removeAttribute("controls");
       video.current.load();
@@ -216,71 +336,104 @@ export default function App() {
   }
 
   function loop() {
-    if (!video.current || !tracker.current.pose || !running && mode === "idle") {
+    if (
+      !video.current ||
+      !tracker.current.pose ||
+      !runningRef.current
+    ) {
       return;
     }
 
-    if (video.current.readyState < 2) {
-      raf.current = requestAnimationFrame(loop);
-      return;
-    }
+    const currentVideo = video.current;
 
-    const currentTime = video.current.currentTime;
-
-    if (mode === "upload" && video.current.ended) {
+    if (modeRef.current === "upload" && currentVideo.ended) {
+      runningRef.current = false;
       setRunning(false);
+
+      if (raf.current) {
+        cancelAnimationFrame(raf.current);
+        raf.current = 0;
+      }
+
       return;
     }
-
-    // MediaPipe VIDEO mode requires increasing timestamps.
-    const now = currentTime * 1000;
 
     if (
-      previousTime.current === null ||
-      now > previousTime.current
+      currentVideo.readyState >= 2 &&
+      !currentVideo.seeking
     ) {
-      const lm = tracker.current.detect(video.current, now);
+      const now =
+        modeRef.current === "upload"
+          ? currentVideo.currentTime * 1000
+          : performance.now();
 
-      if (lm) {
-        const m = analyzePose(lm);
-
-        if (m) {
-          const dt =
-            previousTime.current === null
-              ? 1 / 30
-              : Math.max((now - previousTime.current) / 1000, 1 / 120);
-
-          const punch = detectPunch(
-            previous.current,
-            lm,
-            dt,
+      if (
+        previousTime.current === null ||
+        now > previousTime.current
+      ) {
+        try {
+          const lm = tracker.current.detect(
+            currentVideo,
             now
           );
 
-          if (punch) {
-            setLastPunch(punch);
+          if (lm) {
+            const m = analyzePose(lm);
 
-            setMetrics((prev) => ({
-              ...m,
-              punches: prev.punches + 1,
-              peakSpeed: Math.max(prev.peakSpeed, punch.speed),
-              speed: punch.speed,
-            }));
-          } else {
-            setMetrics((prev) => ({
-              ...m,
-              speed: prev.speed * 0.92,
-              peakSpeed: prev.peakSpeed,
-              punches: prev.punches,
-            }));
+            if (m) {
+              const dt =
+                previousTime.current === null
+                  ? 1 / 30
+                  : Math.max(
+                      (now - previousTime.current) / 1000,
+                      1 / 120
+                    );
+
+              const punch = detectPunch(
+                previous.current,
+                lm,
+                dt,
+                now
+              );
+
+              if (punch) {
+                setLastPunch(punch);
+
+                setMetrics((prev) => ({
+                  ...m,
+                  punches: prev.punches + 1,
+                  peakSpeed: Math.max(
+                    prev.peakSpeed,
+                    punch.speed
+                  ),
+                  speed: punch.speed,
+                }));
+              } else {
+                setMetrics((prev) => ({
+                  ...m,
+                  speed: prev.speed * 0.92,
+                  peakSpeed: prev.peakSpeed,
+                  punches: prev.punches,
+                }));
+              }
+            }
+
+            previous.current = lm;
+            setLandmarks(lm);
           }
+
+          previousTime.current = now;
+        } catch (e) {
+          runningRef.current = false;
+          setRunning(false);
+
+          setError(
+            "Pose analysis stopped. Try refreshing the page and uploading the video again."
+          );
+
+          return;
         }
-
-        previous.current = lm;
-        setLandmarks(lm);
       }
-
-      previousTime.current = now;
     }
 
     raf.current = requestAnimationFrame(loop);
@@ -289,17 +442,27 @@ export default function App() {
   return (
     <div className="app">
       <header>
-        <div>
-          <div className="brand">
-            BIVOL <span>BOXING LAB</span>
-          </div>
-          <div className="sub">
-            REAL-TIME BIOMECHANICS COACH
+        <div className="brand-area">
+          <img
+            src="/boxing-style-lab/logo.png"
+            alt="Bivol Boxing Lab"
+            className="app-logo"
+          />
+
+          <div>
+            <div className="brand">
+              BIVOL <span>BOXING LAB</span>
+            </div>
+
+            <div className="sub">
+              REAL-TIME BIOMECHANICS COACH
+            </div>
           </div>
         </div>
 
         <div className={`status ${running ? "live" : ""}`}>
           <i />
+
           {running
             ? mode === "upload"
               ? "VIDEO ANALYSIS"
@@ -316,7 +479,40 @@ export default function App() {
               muted
               playsInline
               className="video"
+
+              onPlay={() => {
+                if (
+                  modeRef.current === "upload" &&
+                  !runningRef.current
+                ) {
+                  runningRef.current = true;
+                  setRunning(true);
+
+                  previous.current = null;
+                  previousTime.current = null;
+
+                  loop();
+                }
+              }}
+
+              onPause={() => {
+                if (
+                  modeRef.current === "upload" &&
+                  !video.current?.ended
+                ) {
+                  runningRef.current = false;
+                  setRunning(false);
+                }
+              }}
+
+              onSeeking={() => {
+                previous.current = null;
+                previousTime.current = null;
+                setLandmarks(null);
+              }}
+
               onEnded={() => {
+                runningRef.current = false;
                 setRunning(false);
 
                 if (raf.current) {
@@ -326,14 +522,19 @@ export default function App() {
               }}
             />
 
-            <SkeletonOverlay landmarks={landmarks} />
+            <SkeletonOverlay
+              landmarks={landmarks}
+            />
 
             {!running && mode === "idle" && (
               <div className="camera-empty">
                 <Video size={44} />
+
                 <h2>Enter the Lab</h2>
+
                 <p>
-                  Upload a boxing video or use your camera for live analysis
+                  Upload a boxing video or use your
+                  camera for live analysis
                 </p>
               </div>
             )}
@@ -357,6 +558,7 @@ export default function App() {
                 <label className="primary">
                   <Upload size={17} />
                   Upload Video
+
                   <input
                     type="file"
                     accept="video/*"
@@ -371,7 +573,10 @@ export default function App() {
                 </button>
               </>
             ) : (
-              <button className="danger" onClick={stop}>
+              <button
+                className="danger"
+                onClick={stop}
+              >
                 <Square size={16} />
                 Stop
               </button>
@@ -384,31 +589,46 @@ export default function App() {
 
             <label>
               REFERENCE STYLE
+
               <select
                 value={styleKey}
-                onChange={(e) => setStyleKey(e.target.value)}
+                onChange={(e) =>
+                  setStyleKey(e.target.value)
+                }
               >
-                {Object.entries(STYLES).map(([k, v]) => (
-                  <option value={k} key={k}>
-                    {v.name}
-                  </option>
-                ))}
+                {Object.entries(STYLES).map(
+                  ([k, v]) => (
+                    <option
+                      value={k}
+                      key={k}
+                    >
+                      {v.name}
+                    </option>
+                  )
+                )}
               </select>
             </label>
           </div>
 
           {mode === "upload" && (
             <div className="upload-info">
-              Upload mode analyzes the video frame-by-frame using the same
+              Upload mode analyzes the video
+              frame-by-frame using the same
               biomechanics engine as live tracking.
             </div>
           )}
 
-          {error && <div className="error">{error}</div>}
+          {error && (
+            <div className="error">
+              {error}
+            </div>
+          )}
         </section>
 
         <aside>
-          <div className="section-title">LIVE METRICS</div>
+          <div className="section-title">
+            LIVE METRICS
+          </div>
 
           <div className="metric-grid">
             <MetricCard
@@ -456,7 +676,9 @@ export default function App() {
           </div>
 
           <div className="style-box">
-            <div className="eyebrow">STYLE GAP</div>
+            <div className="eyebrow">
+              STYLE GAP
+            </div>
 
             <h3>{style.name}</h3>
 
@@ -507,49 +729,66 @@ export default function App() {
           <div className="action-row">
             <div>
               <Activity />
+
               <span>
                 {lastPunch?.type || "Waiting"}
               </span>
+
               <small>
                 {lastPunch
-                  ? lastPunch.hand.toUpperCase() + " HAND"
+                  ? lastPunch.hand.toUpperCase() +
+                    " HAND"
                   : "Throw a punch"}
               </small>
             </div>
 
             <div>
               <Gauge />
+
               <span>
                 {lastPunch
                   ? lastPunch.speed.toFixed(2)
                   : "—"}{" "}
                 m/s
               </span>
-              <small>PEAK VELOCITY</small>
+
+              <small>
+                PEAK VELOCITY
+              </small>
             </div>
 
             <div>
               <Footprints />
+
               <span>
                 {metrics.footwork.toFixed(0)}
               </span>
-              <small>FOOTWORK SCORE</small>
+
+              <small>
+                FOOTWORK SCORE
+              </small>
             </div>
 
             <div>
               <Shield />
+
               <span>
                 {metrics.guard.toFixed(0)}
               </span>
-              <small>GUARD SCORE</small>
+
+              <small>
+                GUARD SCORE
+              </small>
             </div>
           </div>
         </section>
       </main>
 
       <footer>
-        Biomechanics reference system • *camera-based estimates are
-        normalized and should not be treated as laboratory measurements.
+        Biomechanics reference system •
+        *camera-based estimates are normalized
+        and should not be treated as laboratory
+        measurements.
       </footer>
     </div>
   );
