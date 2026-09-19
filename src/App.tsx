@@ -118,7 +118,6 @@ export default function App() {
     };
   }, []);
 
-  // Screen Wake Lock Handler to keep iPhone screen awake during workout sessions
   const requestWakeLock = async () => {
     try {
       if ('wakeLock' in navigator) {
@@ -173,14 +172,18 @@ export default function App() {
     const video = videoRef.current;
     const canvas = canvasRef.current;
 
-    if (video.currentTime > 0 && !video.paused) {
+    if (video.currentTime > 0 && !video.paused && video.videoWidth > 0) {
       const results = landmarkerRef.current.detectForVideo(video, performance.now());
 
       if (canvas) {
         const ctx = canvas.getContext('2d');
         if (ctx) {
-          canvas.width = video.videoWidth || 640;
-          canvas.height = video.videoHeight || 480;
+          // Synchronize canvas buffer resolution directly with the actual video stream dimensions
+          if (canvas.width !== video.videoWidth || canvas.height !== video.videoHeight) {
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+          }
+
           ctx.clearRect(0, 0, canvas.width, canvas.height);
 
           if (results.landmarks && results.landmarks[0]) {
@@ -233,7 +236,6 @@ export default function App() {
   };
 
   const startCamera = async () => {
-    // Unlock speech synthesis on user interaction for Safari
     if ('speechSynthesis' in window) {
       window.speechSynthesis.speak(new SpeechSynthesisUtterance(''));
     }
@@ -292,10 +294,12 @@ export default function App() {
 
   const drawSkeleton = (ctx: CanvasRenderingContext2D, landmarks: any[], width: number, height: number) => {
     ctx.strokeStyle = currentTheme.accentHex;
-    ctx.lineWidth = Math.max(2, Math.round(width / 300));
+    ctx.lineWidth = Math.max(3, Math.round(width / 200));
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
 
     const drawLine = (p1: number, p2: number) => {
-      if (landmarks[p1].visibility > 0.4 && landmarks[p2].visibility > 0.4) {
+      if (landmarks[p1].visibility > 0.35 && landmarks[p2].visibility > 0.35) {
         ctx.beginPath();
         ctx.moveTo(landmarks[p1].x * width, landmarks[p1].y * height);
         ctx.lineTo(landmarks[p2].x * width, landmarks[p2].y * height);
@@ -303,8 +307,12 @@ export default function App() {
       }
     };
 
-    drawLine(11, 13); drawLine(13, 15);
-    drawLine(12, 14); drawLine(14, 16);
+    // Upper body key connections (arms, shoulders, torso)
+    drawLine(11, 12); // Shoulders
+    drawLine(11, 13); drawLine(13, 15); // Left arm
+    drawLine(12, 14); drawLine(14, 16); // Right arm
+    drawLine(11, 23); drawLine(12, 24); // Torso sides
+    drawLine(23, 24); // Hips
   };
 
   const handleStartTimedSession = () => {
@@ -424,7 +432,7 @@ export default function App() {
                 BRAWLER LABS
               </h1>
               <span className={`text-[9px] px-2 py-0.5 rounded border font-semibold ${currentTheme.badgeBg}`}>
-                MOBILE PRO
+                ALIGNED TRACKER
               </span>
             </div>
             <p className="text-[10px] text-slate-500">Biomechanical Cloud Analytics</p>
@@ -474,7 +482,7 @@ export default function App() {
             playsInline
             muted
             autoPlay
-            className={`w-full h-full object-contain ${mirrorVideo ? 'scale-x-[-1]' : ''}`}
+            className={`absolute inset-0 w-full h-full object-contain ${mirrorVideo ? 'scale-x-[-1]' : ''}`}
           />
           <canvas
             ref={canvasRef}
@@ -756,7 +764,7 @@ export default function App() {
             </div>
 
             <div className="text-[10px] text-slate-600 text-center border-t border-slate-900 pt-4 mt-6">
-              Brawler Boxing Labs v2.0 • Mobile Optimized
+              Brawler Boxing Labs v2.0 • Aligned Tracker
             </div>
           </div>
         </div>
