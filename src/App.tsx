@@ -1,5 +1,6 @@
-import React, { useState, useRef } from 'react';
-import { Target, Activity, Award, RotateCcw, Shield, Zap } from 'lucide-react';
+import React, { useState, useRef, useEffect } from 'react';
+import { Target, Activity, Award, RotateCcw, Camera, Upload } from 'lucide-react';
+import { PoseLandmarker, FilesetResolver } from '@mediapipe/tasks-vision';
 import { SovietPunchAnalyzer, PunchEvent } from './engine/punchDetector';
 import { AICoachEngine, AIAdvice } from './engine/aiCoachEngine';
 
@@ -9,32 +10,141 @@ export default function App() {
   const [lastPunch, setLastPunch] = useState<PunchEvent | null>(null);
   const [aiAdvice, setAiAdvice] = useState<AIAdvice | null>(null);
   const [selectedStyle, setSelectedStyle] = useState<'bivol' | 'beterbiev' | 'loma'>('bivol');
+  const [isCameraActive, setIsCameraActive] = useState<boolean>(false);
+  const [isLoadingModel, setIsLoadingModel] = useState<boolean>(true);
+
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const landmarkerRef = useRef<PoseLandmarker | null>(null);
+  const animFrameRef = useRef<number | null>(null);
 
   const analyzerRef = useRef<SovietPunchAnalyzer>(new SovietPunchAnalyzer());
   const aiCoachRef = useRef<AICoachEngine>(new AICoachEngine());
 
-  // Frame processing callback for MediaPipe pose landmarks
-  const handlePoseFrame = (landmarks: any[]) => {
-    if (!landmarks || landmarks.length === 0) return;
-
-    const punch = analyzerRef.current.processFrame(landmarks, performance.now());
-    if (punch) {
-      setLastPunch(punch);
-      if (punch.type === 'jab') setJabs((prev) => prev + 1);
-      if (punch.type === 'cross') setCrosses((prev) => prev + 1);
-
-      // Trigger Vector AI Evaluation
-      const advice = aiCoachRef.current.evaluatePunch(
-        punch.type === 'jab' ? 'jab' : 'cross',
-        landmarks,
-        punch.elbowAngle,
-        punch.peakVelocity
-      );
-
-      if (advice) {
-        setAiAdvice(advice);
+  // Initialize MediaPipe PoseLandmarker
+  useEffect(() => {
+    async function initMediaPipe() {
+      try {
+        const vision = await FilesetResolver.forVisionTasks(
+          'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@latest/wasm'
+        );
+        landmarkerRef.current = await PoseLandmarker.createFromOptions(vision, {
+          baseOptions: {
+            modelAssetPath: 'https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/1/pose_landmarker_lite.task',
+            delegate: 'GPU'
+          },
+          runningMode: 'VIDEO',
+          numPoses: 1
+        });
+        setIsLoadingModel(false);
+      } catch (err) {
+        console.error('Failed to load MediaPipe PoseLandmarker:', err);
       }
     }
+    initMediaPipe();
+
+    return () => {
+      if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
+    };
+  }, []);
+
+  // Frame processing loop
+  const processVideoFrame = () => {
+    if (!videoRef.current || !landmarkerRef.current || videoRef.current.paused || videoRef.current.ended) {
+      animFrameRef.current = requestAnimationFrame(processVideoFrame);
+      return;
+    }
+
+    const video = videoRef.current;
+    const canvas = canvasRef.current;
+
+    if (video.currentTime > 0 && !video.paused) {
+      const results = landmarkerRef.current.detectForVideo(video, performance.now());
+
+      if (canvas) {
+        const ctx = canvas.getContext('2d');
+        if (ctx) {
+          canvas.width = video.videoWidth;
+          canvas.height = video.videoHeight;
+          ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+          if (results.landmarks && results.landmarks[0]) {
+            const landmarks = results.landmarks[0];
+            drawSkeleton(ctx, landmarks, canvas.width, canvas.height);
+
+            // Process punch telemetry
+            const punch = analyzerRef.current.processFrame(landmarks, performance.now());
+            if (punch) {
+              setLastPunch(punch);
+              if (punch.type === 'jab') setJabs((prev) => prev + 1);
+              if (punch.type === 'cross') setCrosses((prev) => prev + 1);
+
+              const advice = aiCoachRef.current.evaluatePunch(
+                punch.type === 'jab' ? 'jab' : 'cross',
+                landmarks,
+                punch.elbowAngle,
+                punch.peakVelocity
+              );
+              if (advice) setAiAdvice(advice);
+            }
+          }
+        }
+      }
+    }
+
+    animFrameRef.current = requestAnimationFrame(processVideoFrame);
+  };
+
+  // Start Live Webcam
+  const startCamera = async () => {
+    if (!videoRef.current) return;
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { width: 1280, height: 720, facingMode: 'user' }
+      });
+      videoRef.current.srcObject = stream;
+      videoRef.current.play();
+      setIsCameraActive(true);
+      if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
+      processVideoFrame();
+    } catch (err) {
+      alert('Unable to access camera. Please check camera permissions.');
+    }
+  };
+
+  // Handle Local Video Upload
+  const handleVideoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file && videoRef.current) {
+      const url = URL.createObjectURL(file);
+      videoRef.current.srcObject = null;
+      videoRef.current.src = url;
+      videoRef.current.play();
+      setIsCameraActive(true);
+      if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
+      processVideoFrame();
+    }
+  };
+
+  // Draw 2D Pose Skeleton Overlay
+  const drawSkeleton = (ctx: CanvasRenderingContext2D, landmarks: any[], width: number, height: number) => {
+    ctx.strokeStyle = '#06b6d4'; // Cyan joints
+    ctx.lineWidth = 3;
+
+    // Left Arm (11 -> 13 -> 15)
+    ctx.beginPath();
+    ctx.moveTo(landmarks[11].x * width, landmarks[11].y * height);
+    ctx.lineTo(landmarks[13].x * width, landmarks[13].y * height);
+    ctx.lineTo(landmarks[15].x * width, landmarks[15].y * height);
+    ctx.stroke();
+
+    // Right Arm (12 -> 14 -> 16)
+    ctx.strokeStyle = '#818cf8'; // Indigo joints
+    ctx.beginPath();
+    ctx.moveTo(landmarks[12].x * width, landmarks[12].y * height);
+    ctx.lineTo(landmarks[14].x * width, landmarks[14].y * height);
+    ctx.lineTo(landmarks[16].x * width, landmarks[16].y * height);
+    ctx.stroke();
   };
 
   const handleReset = () => {
@@ -52,14 +162,11 @@ export default function App() {
       {/* Header Bar */}
       <header className="flex justify-between items-center border-b border-slate-800 pb-4 mb-6">
         <div className="flex items-center gap-3">
-          <img 
-            src={`${import.meta.env.BASE_URL}logo.png`} 
-            alt="Bivol Boxing Lab" 
+          <img
+            src={`${import.meta.env.BASE_URL}logo.png`}
+            alt="Bivol Boxing Lab"
             className="h-9 w-auto object-contain"
-            onError={(e) => {
-              // Hide broken image icon if logo is not uploaded yet
-              (e.target as HTMLElement).style.display = 'none';
-            }}
+            onError={(e) => { (e.target as HTMLElement).style.display = 'none'; }}
           />
           <div>
             <h1 className="text-xl font-bold tracking-wider text-cyan-400">BIVOL BOXING LAB</h1>
@@ -68,26 +175,18 @@ export default function App() {
         </div>
 
         <div className="flex items-center gap-3">
-          {/* Style Archetype Selector */}
-          <div className="flex gap-2 bg-slate-900 p-1 rounded-lg border border-slate-800">
-            {[
-              { id: 'bivol', name: 'Bivol (Distance)' },
-              { id: 'beterbiev', name: 'Beterbiev (Pressure)' },
-              { id: 'loma', name: 'Lomachenko (Angles)' }
-            ].map((style) => (
-              <button
-                key={style.id}
-                onClick={() => setSelectedStyle(style.id as any)}
-                className={`px-3 py-1.5 text-xs rounded-md transition-all ${
-                  selectedStyle === style.id
-                    ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/50'
-                    : 'text-slate-400 hover:text-slate-200'
-                }`}
-              >
-                {style.name}
-              </button>
-            ))}
-          </div>
+          <button
+            onClick={startCamera}
+            disabled={isLoadingModel}
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-cyan-600 hover:bg-cyan-500 disabled:bg-slate-800 text-xs font-semibold rounded-lg transition-all"
+          >
+            <Camera className="w-3.5 h-3.5" /> Live Camera
+          </button>
+
+          <label className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-xs font-semibold rounded-lg cursor-pointer transition-all">
+            <Upload className="w-3.5 h-3.5 text-slate-300" /> Upload Video
+            <input type="file" accept="video/*" onChange={handleVideoUpload} className="hidden" />
+          </label>
 
           <button
             onClick={handleReset}
@@ -99,35 +198,35 @@ export default function App() {
         </div>
       </header>
 
-      {/* Main Grid: Video Stream + Telemetry */}
+      {/* Main Grid Layout */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Camera Container */}
+        {/* Video Container */}
         <div className="lg:col-span-2 relative bg-slate-900 rounded-xl border border-slate-800 overflow-hidden min-h-[480px] flex items-center justify-center">
-          <div className="absolute top-4 left-4 z-10 flex gap-2">
-            <span className="bg-red-500/20 text-red-400 border border-red-500/40 text-[10px] px-2 py-1 rounded flex items-center gap-1">
-              <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse" /> LIVE POSE STREAM
-            </span>
-            <span className="bg-slate-800 text-slate-300 text-[10px] px-2 py-1 rounded">
-              STAND-ONLY LOCK: ACTIVE
-            </span>
-          </div>
+          <video
+            ref={videoRef}
+            playsInline
+            muted
+            className="absolute inset-0 w-full h-full object-cover"
+          />
+          <canvas
+            ref={canvasRef}
+            className="absolute inset-0 w-full h-full object-cover pointer-events-none"
+          />
 
-          <div className="text-slate-500 text-sm text-center">
-            <Activity className="w-8 h-8 text-cyan-400 mx-auto mb-2 animate-bounce" />
-            <p>Connect video stream or webcam feed</p>
-          </div>
+          {!isCameraActive && (
+            <div className="text-slate-500 text-sm text-center z-10">
+              <Activity className="w-8 h-8 text-cyan-400 mx-auto mb-2 animate-bounce" />
+              <p>{isLoadingModel ? 'Loading MediaPipe Pose Model...' : 'Click "Live Camera" or "Upload Video" to start'}</p>
+            </div>
+          )}
         </div>
 
-        {/* Real-time Dashboard */}
+        {/* Dashboard Side Panel */}
         <div className="space-y-4">
-          {/* Punch Counter Panel */}
           <div className="bg-slate-900 border border-slate-800 rounded-xl p-4">
             <div className="flex justify-between items-center mb-3">
               <span className="text-xs text-slate-400 flex items-center gap-1">
                 <Target className="w-4 h-4 text-cyan-400" /> PUNCH TELEMETRY
-              </span>
-              <span className="text-[10px] bg-cyan-950 text-cyan-400 px-2 py-0.5 rounded border border-cyan-800">
-                DEADZONE SUPPRESSED
               </span>
             </div>
 
@@ -154,7 +253,6 @@ export default function App() {
             )}
           </div>
 
-          {/* Genuine AI Coach Feedback Card */}
           {aiAdvice && (
             <div className={`p-4 rounded-xl border transition-all duration-300 ${
               aiAdvice.severity === 'critical'
@@ -177,26 +275,6 @@ export default function App() {
               <p className="text-xs leading-relaxed opacity-90">{aiAdvice.feedback}</p>
             </div>
           )}
-
-          {/* Soviet Benchmark Index */}
-          <div className="bg-slate-900 border border-slate-800 rounded-xl p-4 space-y-3">
-            <h3 className="text-xs text-slate-400 flex items-center gap-1 mb-2">
-              <Award className="w-4 h-4 text-amber-400" /> SOVIET METRIC BENCHMARKS
-            </h3>
-
-            <div>
-              <div className="flex justify-between text-xs mb-1">
-                <span className="text-slate-300">Lead Hand Dominance (Target: &gt;65%)</span>
-                <span className="text-cyan-400 font-bold">{leadRatio}%</span>
-              </div>
-              <div className="w-full bg-slate-950 h-2 rounded-full overflow-hidden">
-                <div
-                  className="bg-cyan-500 h-full rounded-full transition-all duration-300"
-                  style={{ width: `${leadRatio}%` }}
-                />
-              </div>
-            </div>
-          </div>
         </div>
       </div>
     </div>
