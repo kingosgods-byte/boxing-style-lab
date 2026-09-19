@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Target, Activity, Award, RotateCcw, Camera, Upload, Settings, Palette, UserCheck, TrendingUp } from 'lucide-react';
+import { Target, Activity, RotateCcw, Camera, Upload, Settings, UserCheck, TrendingUp, X, Sliders, Volume2, VolumeX, Cpu } from 'lucide-react';
 import { PoseLandmarker, FilesetResolver } from '@mediapipe/tasks-vision';
 import { SovietPunchAnalyzer, PunchEvent } from './engine/punchDetector';
 import { AICoachEngine, AIAdvice } from './engine/aiCoachEngine';
@@ -11,13 +11,13 @@ type Theme = 'bivol' | 'ggg' | 'loma';
 interface ThemeConfig {
   primary: string;
   accentHex: string;
-  bgGlow: string;
+  badgeBg: string;
 }
 
 const THEMES: Record<Theme, ThemeConfig> = {
-  bivol: { primary: 'text-cyan-400', accentHex: '#06b6d4', bgGlow: 'bg-cyan-500' },
-  ggg: { primary: 'text-red-500', accentHex: '#ef4444', bgGlow: 'bg-red-500' },
-  loma: { primary: 'text-amber-400', accentHex: '#f59e0b', bgGlow: 'bg-amber-500' }
+  bivol: { primary: 'text-cyan-400', accentHex: '#06b6d4', badgeBg: 'bg-cyan-950/80 text-cyan-400 border-cyan-800' },
+  ggg: { primary: 'text-red-500', accentHex: '#ef4444', badgeBg: 'bg-red-950/80 text-red-400 border-red-800' },
+  loma: { primary: 'text-amber-400', accentHex: '#f59e0b', badgeBg: 'bg-amber-950/80 text-amber-400 border-amber-800' }
 };
 
 export default function App() {
@@ -28,13 +28,18 @@ export default function App() {
   const [isCameraActive, setIsCameraActive] = useState<boolean>(false);
   const [isLoadingModel, setIsLoadingModel] = useState<boolean>(true);
 
+  // Brawler-style Settings State
   const [selectedFighter, setSelectedFighter] = useState<string>('bivol');
   const [activeTheme, setActiveTheme] = useState<Theme>('bivol');
-  const [showSettings, setShowSettings] = useState<boolean>(false);
+  const [showSettingsDrawer, setShowSettingsDrawer] = useState<boolean>(false);
+  
+  // Custom Controls
   const [mirrorVideo, setMirrorVideo] = useState<boolean>(true);
   const [showSkeleton, setShowSkeleton] = useState<boolean>(true);
+  const [audioFeedback, setAudioFeedback] = useState<boolean>(true);
+  const [cameraQuality, setCameraQuality] = useState<'720p' | '1080p'>('720p');
 
-  // User Learning State
+  // User Profile Learning Memory
   const [userStats, setUserStats] = useState<UserStats>({
     totalPunches: 0,
     avgJabAngle: 150,
@@ -73,7 +78,7 @@ export default function App() {
         });
         setIsLoadingModel(false);
       } catch (err) {
-        console.error('Failed to load MediaPipe:', err);
+        console.error('Failed to load MediaPipe PoseLandmarker:', err);
       }
     }
     initMediaPipe();
@@ -82,6 +87,15 @@ export default function App() {
       if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
     };
   }, []);
+
+  const speakFeedback = (text: string) => {
+    if (!audioFeedback || !('speechSynthesis' in window)) return;
+    window.speechSynthesis.cancel();
+    const utterance = new SpeechSynthesisUtterance(text);
+    utterance.rate = 1.1;
+    utterance.pitch = 1.0;
+    window.speechSynthesis.speak(utterance);
+  };
 
   const processVideoFrame = () => {
     if (!videoRef.current || !landmarkerRef.current || videoRef.current.paused || videoRef.current.ended) {
@@ -114,7 +128,6 @@ export default function App() {
               if (punch.type === 'jab') setJabs((prev) => prev + 1);
               if (punch.type === 'cross') setCrosses((prev) => prev + 1);
 
-              // 1. Save data locally to build user profile
               userDataRef.current.saveSample({
                 timestamp: Date.now(),
                 type: punch.type === 'jab' ? 'jab' : 'cross',
@@ -124,7 +137,6 @@ export default function App() {
               const updatedStats = userDataRef.current.getUserStats();
               setUserStats(updatedStats);
 
-              // 2. Evaluate with adaptive stats
               const advice = aiCoachRef.current.evaluatePunch(
                 punch.type === 'jab' ? 'jab' : 'cross',
                 landmarks,
@@ -133,7 +145,10 @@ export default function App() {
                 selectedFighter,
                 updatedStats
               );
-              if (advice) setAiAdvice(advice);
+              if (advice) {
+                setAiAdvice(advice);
+                speakFeedback(advice.feedback);
+              }
             }
           }
         }
@@ -146,13 +161,15 @@ export default function App() {
   const startCamera = async () => {
     if (!videoRef.current) return;
     try {
-      // Mobile-optimized constraints with facingMode fallback
+      const targetWidth = cameraQuality === '1080p' ? 1920 : 1280;
+      const targetHeight = cameraQuality === '1080p' ? 1080 : 720;
+
       const constraints: MediaStreamConstraints = {
         video: {
           facingMode: 'user',
-          width: { ideal: 1280, max: 1920 },
-          height: { ideal: 720, max: 1080 },
-          frameRate: { ideal: 30, max: 60 }
+          width: { ideal: targetWidth },
+          height: { ideal: targetHeight },
+          frameRate: { ideal: 60 }
         },
         audio: false
       };
@@ -165,7 +182,7 @@ export default function App() {
       if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
       processVideoFrame();
     } catch (err) {
-      alert('Camera access failed. Please ensure camera permissions are granted.');
+      alert('Camera access failed. Check device permissions.');
     }
   };
 
@@ -185,11 +202,10 @@ export default function App() {
 
   const drawSkeleton = (ctx: CanvasRenderingContext2D, landmarks: any[], width: number, height: number) => {
     ctx.strokeStyle = currentTheme.accentHex;
-    ctx.lineWidth = Math.max(2, Math.round(width / 300));
+    ctx.lineWidth = Math.max(2, Math.round(width / 280));
 
-    // Arms drawing
     const drawLine = (p1: number, p2: number) => {
-      if (landmarks[p1].visibility > 0.5 && landmarks[p2].visibility > 0.5) {
+      if (landmarks[p1].visibility > 0.4 && landmarks[p2].visibility > 0.4) {
         ctx.beginPath();
         ctx.moveTo(landmarks[p1].x * width, landmarks[p1].y * height);
         ctx.lineTo(landmarks[p2].x * width, landmarks[p2].y * height);
@@ -208,96 +224,68 @@ export default function App() {
     setAiAdvice(null);
   };
 
-  const totalPunches = jabs + crosses;
-  const leadRatio = totalPunches > 0 ? Math.round((jabs / totalPunches) * 100) : 0;
-
   return (
-    <div className="bg-slate-950 text-slate-300 min-h-screen p-2 sm:p-6 font-mono selection:bg-slate-800">
-      {/* Top Navigation */}
-      <header className="flex flex-col sm:flex-row justify-between items-stretch sm:items-center gap-3 border-b border-slate-900 pb-3 mb-3 sm:mb-6">
-        <div className="flex items-center gap-2">
-          <h1 className={`text-base sm:text-xl font-bold tracking-wider ${currentTheme.primary}`}>
-            BOXING LAB
-          </h1>
-          <span className="text-[10px] bg-slate-900 text-slate-500 px-2 py-0.5 rounded border border-slate-800">
-            AI PRECISION
-          </span>
+    <div className="bg-slate-950 text-slate-300 min-h-screen p-2 sm:p-5 font-mono relative overflow-x-hidden selection:bg-slate-800">
+      
+      {/* Top Header Navigation */}
+      <header className="flex flex-col sm:flex-row justify-between items-stretch sm:items-center gap-2.5 border-b border-slate-900 pb-3 mb-3 sm:mb-5">
+        <div className="flex items-center gap-2.5">
+          <div className="p-1.5 bg-slate-900 rounded-lg border border-slate-800">
+            <Cpu className={`w-5 h-5 ${currentTheme.primary}`} />
+          </div>
+          <div>
+            <div className="flex items-center gap-2">
+              <h1 className={`text-base sm:text-lg font-bold tracking-wider uppercase ${currentTheme.primary}`}>
+                BRAWLER LABS
+              </h1>
+              <span className={`text-[9px] px-2 py-0.5 rounded border font-semibold ${currentTheme.badgeBg}`}>
+                PRO EDITION
+              </span>
+            </div>
+            <p className="text-[10px] text-slate-500">Real Fighter Kinetic Intelligence</p>
+          </div>
         </div>
 
-        {/* Responsive Mobile Button Bar */}
+        {/* Action Controls */}
         <div className="grid grid-cols-4 gap-1.5 sm:flex sm:items-center sm:gap-2">
           <button
             onClick={startCamera}
             disabled={isLoadingModel}
-            className="flex items-center justify-center gap-1 px-2.5 py-2 sm:py-1.5 bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-800 text-[11px] font-medium rounded-lg"
+            className="flex items-center justify-center gap-1 px-3 py-2 bg-slate-900 hover:bg-slate-800 text-slate-200 border border-slate-800 text-xs font-semibold rounded-lg transition-all"
           >
             <Camera className="w-3.5 h-3.5 text-slate-400" />
-            <span className="hidden sm:inline">Live</span>
+            <span className="hidden sm:inline">Camera</span>
           </button>
 
-          <label className="flex items-center justify-center gap-1 px-2.5 py-2 sm:py-1.5 bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-800 text-[11px] font-medium rounded-lg cursor-pointer">
+          <label className="flex items-center justify-center gap-1 px-3 py-2 bg-slate-900 hover:bg-slate-800 text-slate-200 border border-slate-800 text-xs font-semibold rounded-lg cursor-pointer transition-all">
             <Upload className="w-3.5 h-3.5 text-slate-400" />
             <span className="hidden sm:inline">Upload</span>
             <input type="file" accept="video/*" onChange={handleVideoUpload} className="hidden" />
           </label>
 
           <button
-            onClick={() => setShowSettings(!showSettings)}
-            className="flex items-center justify-center p-2 bg-slate-900 hover:bg-slate-800 text-slate-400 border border-slate-800 rounded-lg"
+            onClick={() => setShowSettingsDrawer(true)}
+            className="flex items-center justify-center p-2 bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-800 rounded-lg transition-all relative"
+            title="App Settings"
           >
             <Settings className="w-4 h-4" />
           </button>
 
           <button
             onClick={handleReset}
-            className="flex items-center justify-center p-2 bg-slate-900 hover:bg-slate-800 text-slate-400 border border-slate-800 rounded-lg"
+            className="flex items-center justify-center p-2 bg-slate-900 hover:bg-slate-800 text-slate-400 border border-slate-800 rounded-lg transition-all"
+            title="Reset Session"
           >
             <RotateCcw className="w-4 h-4" />
           </button>
         </div>
       </header>
 
-      {/* Slide-out Settings */}
-      {showSettings && (
-        <div className="mb-4 p-3 bg-slate-900/90 border border-slate-800 rounded-xl space-y-3 text-xs">
-          <div className="flex items-center justify-between border-b border-slate-800 pb-2">
-            <span className="font-semibold text-slate-400 flex items-center gap-1">
-              <Palette className="w-3.5 h-3.5" /> APP PREFERENCES
-            </span>
-          </div>
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-            <button
-              onClick={() => setMirrorVideo(!mirrorVideo)}
-              className="p-2 bg-slate-950 border border-slate-800 rounded text-left"
-            >
-              <div className="text-[10px] text-slate-500">Mirror Feed</div>
-              <div className="font-bold text-slate-200">{mirrorVideo ? 'ON' : 'OFF'}</div>
-            </button>
-            <button
-              onClick={() => setShowSkeleton(!showSkeleton)}
-              className="p-2 bg-slate-950 border border-slate-800 rounded text-left"
-            >
-              <div className="text-[10px] text-slate-500">Skeleton Wireframe</div>
-              <div className="font-bold text-slate-200">{showSkeleton ? 'SHOW' : 'HIDE'}</div>
-            </button>
-            <button
-              onClick={() => {
-                userDataRef.current.clearData();
-                setUserStats(userDataRef.current.getUserStats());
-              }}
-              className="p-2 bg-red-950/40 border border-red-900/40 rounded text-left col-span-2 sm:col-span-1"
-            >
-              <div className="text-[10px] text-red-400">User Memory</div>
-              <div className="font-bold text-red-300">Reset Local Profile</div>
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* Main Grid */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-3 sm:gap-6">
-        {/* Mobile-Friendly Video Player Container */}
-        <div className="lg:col-span-2 relative bg-slate-900/80 rounded-xl border border-slate-900 overflow-hidden w-full aspect-[3/4] min-h-[360px] sm:aspect-video flex items-center justify-center">
+      {/* Main Grid View */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-3 sm:gap-5">
+        
+        {/* Mobile & Desktop Video Canvas Window */}
+        <div className="lg:col-span-2 relative bg-slate-900/90 rounded-2xl border border-slate-900 overflow-hidden w-full aspect-[3/4] sm:aspect-video flex items-center justify-center shadow-2xl">
           <video
             ref={videoRef}
             playsInline
@@ -315,18 +303,29 @@ export default function App() {
 
           {!isCameraActive && (
             <div className="text-slate-500 text-xs text-center z-10 p-4 max-w-xs">
-              <Activity className="w-7 h-7 text-slate-600 mx-auto mb-2 animate-pulse" />
-              <p>{isLoadingModel ? 'Preparing MediaPipe AI Engine...' : 'Tap Live Camera or Upload Video to Start Session'}</p>
+              <Activity className="w-8 h-8 text-slate-600 mx-auto mb-2 animate-pulse" />
+              <p className="leading-relaxed">
+                {isLoadingModel ? 'Initializing MediaPipe AI Engine...' : 'Tap Camera or Upload to Start Real-Time Kinetic Analysis'}
+              </p>
+            </div>
+          )}
+
+          {/* Real-time Overlay Status Pill */}
+          {isCameraActive && (
+            <div className="absolute top-3 left-3 bg-slate-950/80 backdrop-blur-md px-2.5 py-1 rounded-full border border-slate-800/80 text-[10px] text-slate-300 flex items-center gap-1.5 z-20">
+              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-ping" />
+              LIVE TELEMETRY
             </div>
           )}
         </div>
 
-        {/* Right Dashboard */}
+        {/* Dashboard Right Sidebar */}
         <div className="space-y-3">
-          {/* Target Fighter Picker */}
-          <div className="bg-slate-900/50 border border-slate-900 rounded-xl p-3">
-            <label className="text-[10px] text-slate-500 flex items-center gap-1 mb-1.5 uppercase tracking-wider">
-              <UserCheck className="w-3.5 h-3.5 text-slate-400" /> Archetype Profile
+          
+          {/* Active Target Fighter Benchmark */}
+          <div className="bg-slate-900/60 border border-slate-900 rounded-xl p-3.5 space-y-2">
+            <label className="text-[10px] text-slate-500 flex items-center gap-1 uppercase tracking-wider font-bold">
+              <UserCheck className="w-3.5 h-3.5 text-slate-400" /> Target Fighter Archetype
             </label>
             <select
               value={selectedFighter}
@@ -336,7 +335,7 @@ export default function App() {
                 else if (e.target.value === 'loma') setActiveTheme('loma');
                 else setActiveTheme('bivol');
               }}
-              className="w-full bg-slate-950 border border-slate-800 text-slate-200 text-xs rounded-lg p-2 focus:outline-none"
+              className="w-full bg-slate-950 border border-slate-800 text-slate-200 text-xs rounded-lg p-2.5 focus:outline-none focus:border-slate-700"
             >
               {Object.values(FIGHTER_STYLES).map((f) => (
                 <option key={f.id} value={f.id}>
@@ -344,55 +343,58 @@ export default function App() {
                 </option>
               ))}
             </select>
+            <p className="text-[11px] text-slate-400 leading-normal">
+              {currentFighter.description}
+            </p>
           </div>
 
-          {/* Telemetry Counter */}
-          <div className="bg-slate-900/50 border border-slate-900 rounded-xl p-3">
-            <span className="text-[10px] text-slate-500 flex items-center gap-1 mb-2 uppercase tracking-wider">
-              <Target className="w-3.5 h-3.5 text-slate-500" /> Punch Counter
+          {/* Punch Telemetry */}
+          <div className="bg-slate-900/60 border border-slate-900 rounded-xl p-3.5">
+            <span className="text-[10px] text-slate-500 flex items-center gap-1 mb-2.5 uppercase tracking-wider font-bold">
+              <Target className="w-3.5 h-3.5 text-slate-500" /> Kinetic Session Stats
             </span>
 
-            <div className="grid grid-cols-2 gap-2 text-center mb-2">
-              <div className="bg-slate-950 p-2.5 rounded-lg border border-slate-900">
-                <span className={`text-2xl font-extrabold ${currentTheme.primary}`}>{jabs}</span>
-                <p className="text-[9px] text-slate-500 mt-0.5">JABS</p>
+            <div className="grid grid-cols-2 gap-2.5 text-center mb-3">
+              <div className="bg-slate-950 p-3 rounded-lg border border-slate-900">
+                <span className={`text-2xl sm:text-3xl font-extrabold ${currentTheme.primary}`}>{jabs}</span>
+                <p className="text-[10px] text-slate-500 mt-0.5">LEAD JABS</p>
               </div>
-              <div className="bg-slate-950 p-2.5 rounded-lg border border-slate-900">
-                <span className="text-2xl font-extrabold text-slate-400">{crosses}</span>
-                <p className="text-[9px] text-slate-500 mt-0.5">CROSSES</p>
+              <div className="bg-slate-950 p-3 rounded-lg border border-slate-900">
+                <span className="text-2xl sm:text-3xl font-extrabold text-slate-300">{crosses}</span>
+                <p className="text-[10px] text-slate-500 mt-0.5">CROSSES</p>
               </div>
             </div>
 
             {lastPunch && (
-              <div className="bg-slate-950 p-2 rounded border border-slate-900 text-[11px] flex justify-between items-center">
+              <div className="bg-slate-950 p-2.5 rounded-lg border border-slate-900 text-xs flex justify-between items-center">
                 <span className="text-slate-400">
-                  Last: <strong className={`${currentTheme.primary} uppercase`}>{lastPunch.type}</strong>
+                  Apex: <strong className={`${currentTheme.primary} uppercase`}>{lastPunch.type}</strong>
                 </span>
-                <span className="text-slate-500 text-[10px]">
+                <span className="text-slate-400 text-[11px]">
                   {lastPunch.peakVelocity} m/s | {lastPunch.elbowAngle}°
                 </span>
               </div>
             )}
           </div>
 
-          {/* User Profile Adaptation Trends */}
-          <div className="bg-slate-900/50 border border-slate-900 rounded-xl p-3 text-xs space-y-1.5">
-            <span className="text-[10px] text-slate-500 flex items-center gap-1 uppercase tracking-wider">
-              <TrendingUp className="w-3.5 h-3.5 text-slate-400" /> Personal Baseline Profile
+          {/* Personalized Continuous Learning Memory */}
+          <div className="bg-slate-900/60 border border-slate-900 rounded-xl p-3.5 text-xs space-y-2">
+            <span className="text-[10px] text-slate-500 flex items-center gap-1 uppercase tracking-wider font-bold">
+              <TrendingUp className="w-3.5 h-3.5 text-slate-400" /> Continuous User Memory
             </span>
             <div className="flex justify-between text-slate-400">
-              <span>Recorded Punches:</span>
-              <strong className="text-slate-200">{userStats.samplesCount}</strong>
+              <span>Saved Punches:</span>
+              <strong className="text-slate-200 font-mono">{userStats.samplesCount}</strong>
             </div>
             <div className="flex justify-between text-slate-400">
-              <span>Avg Extension (Jab/Cross):</span>
-              <strong className="text-slate-200">{userStats.avgJabAngle}° / {userStats.avgCrossAngle}°</strong>
+              <span>Personal Extension Averages:</span>
+              <strong className="text-slate-200 font-mono">{userStats.avgJabAngle}° Jab / {userStats.avgCrossAngle}° Cross</strong>
             </div>
           </div>
 
-          {/* Real-time AI Diagnostic Alert */}
+          {/* AI Diagnostic Alert */}
           {aiAdvice && (
-            <div className={`p-3 rounded-xl border text-xs ${
+            <div className={`p-3.5 rounded-xl border transition-all duration-300 ${
               aiAdvice.severity === 'critical'
                 ? 'bg-red-950/30 border-red-900/50 text-red-300'
                 : aiAdvice.severity === 'warning'
@@ -401,13 +403,133 @@ export default function App() {
             }`}>
               <div className="flex justify-between items-center mb-1">
                 <span className="text-[10px] font-bold uppercase tracking-wider">{aiAdvice.metricName}</span>
-                <span className="font-mono font-bold">{aiAdvice.score}%</span>
+                <span className="font-mono font-bold text-xs">{aiAdvice.score}% Match</span>
               </div>
-              <p className="leading-relaxed opacity-90">{aiAdvice.feedback}</p>
+              <p className="text-xs leading-relaxed opacity-90">{aiAdvice.feedback}</p>
             </div>
           )}
         </div>
       </div>
+
+      {/* Brawler-Style Sliding App Settings Drawer */}
+      {showSettingsDrawer && (
+        <div className="fixed inset-0 z-50 flex justify-end bg-black/70 backdrop-blur-sm transition-all">
+          <div className="w-full max-w-md bg-slate-950 border-l border-slate-800 h-full p-5 flex flex-col justify-between overflow-y-auto">
+            <div className="space-y-5">
+              
+              {/* Drawer Header */}
+              <div className="flex justify-between items-center border-b border-slate-900 pb-3">
+                <div className="flex items-center gap-2">
+                  <Sliders className="w-4 h-4 text-slate-400" />
+                  <h2 className="text-sm font-bold uppercase tracking-wider text-slate-200">Brawler Preferences</h2>
+                </div>
+                <button
+                  onClick={() => setShowSettingsDrawer(false)}
+                  className="p-1.5 text-slate-500 hover:text-slate-300 bg-slate-900 rounded-lg border border-slate-800"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              {/* Theme Selector */}
+              <div className="space-y-2">
+                <label className="text-xs text-slate-500 block uppercase font-bold">Theme Palette</label>
+                <div className="grid grid-cols-3 gap-2">
+                  {(['bivol', 'ggg', 'loma'] as Theme[]).map((t) => (
+                    <button
+                      key={t}
+                      onClick={() => setActiveTheme(t)}
+                      className={`py-2 px-3 rounded-lg border text-xs capitalize transition-all ${
+                        activeTheme === t
+                          ? 'bg-slate-900 border-slate-700 text-slate-100 font-bold'
+                          : 'bg-slate-950 border-slate-900 text-slate-500 hover:text-slate-400'
+                      }`}
+                    >
+                      {t}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Speech AI Settings */}
+              <div className="space-y-2">
+                <label className="text-xs text-slate-500 block uppercase font-bold">Voice Coaching & Audio</label>
+                <button
+                  onClick={() => setAudioFeedback(!audioFeedback)}
+                  className="w-full p-3 bg-slate-900 border border-slate-800 rounded-xl text-left flex justify-between items-center"
+                >
+                  <div className="flex items-center gap-2">
+                    {audioFeedback ? <Volume2 className="w-4 h-4 text-emerald-400" /> : <VolumeX className="w-4 h-4 text-slate-500" />}
+                    <span className="text-xs text-slate-300">Live Voice Correction</span>
+                  </div>
+                  <span className={`text-xs font-bold ${audioFeedback ? 'text-emerald-400' : 'text-slate-500'}`}>
+                    {audioFeedback ? 'ENABLED' : 'MUTED'}
+                  </span>
+                </button>
+              </div>
+
+              {/* Camera Preferences */}
+              <div className="space-y-2">
+                <label className="text-xs text-slate-500 block uppercase font-bold">Camera Feed Controls</label>
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    onClick={() => setMirrorVideo(!mirrorVideo)}
+                    className="p-3 bg-slate-900 border border-slate-800 rounded-xl text-left"
+                  >
+                    <div className="text-[10px] text-slate-500">Mirror Feed</div>
+                    <div className="text-xs font-bold text-slate-200 mt-0.5">{mirrorVideo ? 'ACTIVE' : 'OFF'}</div>
+                  </button>
+                  <button
+                    onClick={() => setShowSkeleton(!showSkeleton)}
+                    className="p-3 bg-slate-900 border border-slate-800 rounded-xl text-left"
+                  >
+                    <div className="text-[10px] text-slate-500">Skeleton Wireframe</div>
+                    <div className="text-xs font-bold text-slate-200 mt-0.5">{showSkeleton ? 'VISIBLE' : 'HIDDEN'}</div>
+                  </button>
+                </div>
+              </div>
+
+              {/* Quality Preset */}
+              <div className="space-y-2">
+                <label className="text-xs text-slate-500 block uppercase font-bold">Target Resolution</label>
+                <div className="grid grid-cols-2 gap-2">
+                  {(['720p', '1080p'] as const).map((q) => (
+                    <button
+                      key={q}
+                      onClick={() => setCameraQuality(q)}
+                      className={`p-2.5 rounded-xl border text-xs text-center font-bold transition-all ${
+                        cameraQuality === q
+                          ? 'bg-slate-900 border-slate-700 text-slate-200'
+                          : 'bg-slate-950 border-slate-900 text-slate-500'
+                      }`}
+                    >
+                      {q}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* User Profile Reset */}
+              <div className="pt-2">
+                <button
+                  onClick={() => {
+                    userDataRef.current.clearData();
+                    setUserStats(userDataRef.current.getUserStats());
+                    alert('Local user memory cleared.');
+                  }}
+                  className="w-full p-3 bg-red-950/30 border border-red-900/50 text-red-400 rounded-xl text-xs font-bold text-center hover:bg-red-950/50 transition-all"
+                >
+                  Reset User Training Memory
+                </button>
+              </div>
+            </div>
+
+            <div className="text-[10px] text-slate-600 text-center border-t border-slate-900 pt-3">
+              Brawler Boxing Labs v2.0 • On-Device Biomechanical Learning
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
