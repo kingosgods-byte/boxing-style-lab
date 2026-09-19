@@ -240,12 +240,12 @@ export default function App() {
   };
 
   return (
-    <div className="bg-slate-950 text-slate-300 min-h-screen p-2 sm:p-5 font-mono relative overflow-x-hidden selection:bg-slate-800">
+    <div className="bg-slate-950 text-slate-300 min-h-screen p-3 sm:p-5 font-mono relative pb-24 sm:pb-5 selection:bg-slate-800">
       
       {/* Top Header Navigation */}
-      <header className="flex flex-col sm:flex-row justify-between items-stretch sm:items-center gap-2.5 border-b border-slate-900 pb-3 mb-3 sm:mb-5">
+      <header className="flex justify-between items-center border-b border-slate-900 pb-3 mb-3 sm:mb-5">
         <div className="flex items-center gap-2.5">
-          <div className="p-1.5 bg-slate-900 rounded-lg border border-slate-800">
+          <div className="p-2 bg-slate-900 rounded-xl border border-slate-800">
             <Cpu className={`w-5 h-5 ${currentTheme.primary}`} />
           </div>
           <div>
@@ -254,44 +254,44 @@ export default function App() {
                 BRAWLER LABS
               </h1>
               <span className={`text-[9px] px-2 py-0.5 rounded border font-semibold ${currentTheme.badgeBg}`}>
-                PRO EDITION
+                PRO
               </span>
             </div>
-            <p className="text-[10px] text-slate-500">Real Fighter Kinetic Intelligence</p>
+            <p className="text-[10px] text-slate-500">Kinetic Boxing Intelligence</p>
           </div>
         </div>
 
-        {/* Action Controls */}
-        <div className="grid grid-cols-4 gap-1.5 sm:flex sm:items-center sm:gap-2">
+        {/* Desktop Action Controls */}
+        <div className="hidden sm:flex items-center gap-2">
           <button
             onClick={startCamera}
             disabled={isLoadingModel}
-            className="flex items-center justify-center gap-1 px-3 py-2 bg-slate-900 hover:bg-slate-800 text-slate-200 border border-slate-800 text-xs font-semibold rounded-lg transition-all"
+            className="flex items-center gap-1.5 px-3.5 py-2.5 bg-slate-900 hover:bg-slate-800 active:scale-95 text-slate-200 border border-slate-800 text-xs font-semibold rounded-xl transition-all touch-manipulation"
           >
-            <Camera className="w-3.5 h-3.5 text-slate-400" />
-            <span className="hidden sm:inline">Camera</span>
+            <Camera className="w-4 h-4 text-slate-400" />
+            <span>Camera</span>
           </button>
 
-          <label className="flex items-center justify-center gap-1 px-3 py-2 bg-slate-900 hover:bg-slate-800 text-slate-200 border border-slate-800 text-xs font-semibold rounded-lg cursor-pointer transition-all">
-            <Upload className="w-3.5 h-3.5 text-slate-400" />
-            <span className="hidden sm:inline">Upload</span>
+          <label className="flex items-center gap-1.5 px-3.5 py-2.5 bg-slate-900 hover:bg-slate-800 active:scale-95 text-slate-200 border border-slate-800 text-xs font-semibold rounded-xl cursor-pointer transition-all touch-manipulation">
+            <Upload className="w-4 h-4 text-slate-400" />
+            <span>Upload</span>
             <input type="file" accept="video/*" onChange={handleVideoUpload} className="hidden" />
           </label>
 
           <button
             onClick={() => setShowSettingsDrawer(true)}
-            className="flex items-center justify-center p-2 bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-800 rounded-lg transition-all relative"
+            className="p-2.5 bg-slate-900 hover:bg-slate-800 active:scale-95 text-slate-300 border border-slate-800 rounded-xl transition-all touch-manipulation"
             title="App Settings"
           >
-            <Settings className="w-4 h-4" />
+            <Settings className="w-4.5 h-4.5" />
           </button>
 
           <button
             onClick={handleReset}
-            className="flex items-center justify-center p-2 bg-slate-900 hover:bg-slate-800 text-slate-400 border border-slate-800 rounded-lg transition-all"
+            className="p-2.5 bg-slate-900 hover:bg-slate-800 active:scale-95 text-slate-400 border border-slate-800 rounded-xl transition-all touch-manipulation"
             title="Reset Session"
           >
-            <RotateCcw className="w-4 h-4" />
+            <RotateCcw className="w-4.5 h-4.5" />
           </button>
         </div>
       </header>
@@ -300,7 +300,7 @@ export default function App() {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-3 sm:gap-5">
         
         {/* Mobile & Desktop Video Canvas Window */}
-        <div className="lg:col-span-2 relative bg-slate-900/90 rounded-2xl border border-slate-900 overflow-hidden w-full aspect-[3/4] sm:aspect-video flex items-center justify-center shadow-2xl">
+        <div className="lg:col-span-2 relative bg-slate-900/90 rounded-2xl border border-slate-900 overflow-hidden w-full aspect-[4/5] sm:aspect-video flex items-center justify-center shadow-2xl">
           <video
             ref={videoRef}
             playsInline
@@ -317,27 +317,27 @@ export default function App() {
           />
 
           {!isCameraActive && (
-            <div className="text-slate-500 text-xs text-center z-10 p-4 max-w-xs">
-              <Activity className="w-8 h-8 text-slate-600 mx-auto mb-2 animate-pulse" />
+            <div className="text-slate-500 text-xs text-center z-10 p-5 max-w-xs space-y-3">
+              <Activity className="w-10 h-10 text-slate-600 mx-auto animate-pulse" />
               <p className="leading-relaxed">
-                {isLoadingModel ? 'Initializing MediaPipe AI Engine...' : 'Tap Camera or Upload to Start Real-Time Kinetic Analysis'}
+                {isLoadingModel ? 'Initializing MediaPipe AI Engine...' : 'Tap Camera or Upload below to start live kinetic tracking'}
               </p>
             </div>
           )}
 
           {/* Real-time Overlay Status Pill */}
           {isCameraActive && (
-            <div className="absolute top-3 left-3 bg-slate-950/80 backdrop-blur-md px-2.5 py-1 rounded-full border border-slate-800/80 text-[10px] text-slate-300 flex items-center gap-1.5 z-20">
+            <div className="absolute top-3 left-3 bg-slate-950/80 backdrop-blur-md px-3 py-1.5 rounded-full border border-slate-800 text-[10px] text-slate-300 flex items-center gap-2 z-20">
               <span className="w-2 h-2 rounded-full bg-emerald-500 animate-ping" />
               LIVE TELEMETRY
             </div>
           )}
 
-          {/* Live Dynamic Combo Overlay HUD */}
+          {/* Dynamic Combo Overlay HUD */}
           {lastCombo && (
-            <div className="absolute bottom-4 left-4 right-4 bg-slate-950/90 backdrop-blur-md border border-amber-500/50 p-3 rounded-xl flex justify-between items-center z-20 animate-bounce">
-              <div className="flex items-center gap-2">
-                <Flame className="w-5 h-5 text-amber-400" />
+            <div className="absolute bottom-3 left-3 right-3 bg-slate-950/90 backdrop-blur-md border border-amber-500/50 p-3 rounded-xl flex justify-between items-center z-20 animate-bounce">
+              <div className="flex items-center gap-2.5">
+                <Flame className="w-6 h-6 text-amber-400 shrink-0" />
                 <div>
                   <h3 className="text-xs font-bold text-amber-400 uppercase tracking-wide">{lastCombo.comboName}</h3>
                   <p className="text-[10px] text-slate-400">Sequence: {lastCombo.sequence.join(' ➔ ').toUpperCase()}</p>
@@ -345,19 +345,19 @@ export default function App() {
               </div>
               <div className="text-right">
                 <span className="text-sm font-extrabold text-amber-300">{lastCombo.totalTimeMs} ms</span>
-                <p className="text-[10px] text-slate-400">{lastCombo.avgVelocity} m/s avg</p>
+                <p className="text-[10px] text-slate-400">{lastCombo.avgVelocity} m/s</p>
               </div>
             </div>
           )}
         </div>
 
-        {/* Dashboard Right Sidebar */}
+        {/* Dashboard Sidebar Controls */}
         <div className="space-y-3">
           
-          {/* Active Target Fighter Benchmark */}
-          <div className="bg-slate-900/60 border border-slate-900 rounded-xl p-3.5 space-y-2">
-            <label className="text-[10px] text-slate-500 flex items-center gap-1 uppercase tracking-wider font-bold">
-              <UserCheck className="w-3.5 h-3.5 text-slate-400" /> Target Fighter Archetype
+          {/* Target Fighter Archetype */}
+          <div className="bg-slate-900/60 border border-slate-900 rounded-2xl p-4 space-y-2">
+            <label className="text-[10px] text-slate-500 flex items-center gap-1.5 uppercase tracking-wider font-bold">
+              <UserCheck className="w-4 h-4 text-slate-400" /> Target Fighter Archetype
             </label>
             <select
               value={selectedFighter}
@@ -367,7 +367,7 @@ export default function App() {
                 else if (e.target.value === 'loma') setActiveTheme('loma');
                 else setActiveTheme('bivol');
               }}
-              className="w-full bg-slate-950 border border-slate-800 text-slate-200 text-xs rounded-lg p-2.5 focus:outline-none focus:border-slate-700"
+              className="w-full bg-slate-950 border border-slate-800 text-slate-200 text-xs rounded-xl p-3 focus:outline-none focus:border-slate-700 h-12 touch-manipulation"
             >
               {Object.values(FIGHTER_STYLES).map((f) => (
                 <option key={f.id} value={f.id}>
@@ -375,62 +375,62 @@ export default function App() {
                 </option>
               ))}
             </select>
-            <p className="text-[11px] text-slate-400 leading-normal">
+            <p className="text-[11px] text-slate-400 leading-normal pt-1">
               {currentFighter.description}
             </p>
           </div>
 
-          {/* Punch & Combo Telemetry Grid */}
-          <div className="bg-slate-900/60 border border-slate-900 rounded-xl p-3.5">
-            <span className="text-[10px] text-slate-500 flex items-center gap-1 mb-2.5 uppercase tracking-wider font-bold">
-              <Target className="w-3.5 h-3.5 text-slate-500" /> Kinetic Session Stats
+          {/* Kinetic Stats Overview */}
+          <div className="bg-slate-900/60 border border-slate-900 rounded-2xl p-4">
+            <span className="text-[10px] text-slate-500 flex items-center gap-1.5 mb-3 uppercase tracking-wider font-bold">
+              <Target className="w-4 h-4 text-slate-500" /> Kinetic Session Stats
             </span>
 
             <div className="grid grid-cols-3 gap-2 text-center mb-3">
-              <div className="bg-slate-950 p-2.5 rounded-lg border border-slate-900">
-                <span className={`text-xl sm:text-2xl font-extrabold ${currentTheme.primary}`}>{jabs}</span>
-                <p className="text-[9px] text-slate-500 mt-0.5">JABS</p>
+              <div className="bg-slate-950 p-3 rounded-xl border border-slate-900">
+                <span className={`text-2xl font-extrabold ${currentTheme.primary}`}>{jabs}</span>
+                <p className="text-[10px] text-slate-500 mt-1 font-bold">JABS</p>
               </div>
-              <div className="bg-slate-950 p-2.5 rounded-lg border border-slate-900">
-                <span className="text-xl sm:text-2xl font-extrabold text-slate-300">{crosses}</span>
-                <p className="text-[9px] text-slate-500 mt-0.5">CROSSES</p>
+              <div className="bg-slate-950 p-3 rounded-xl border border-slate-900">
+                <span className="text-2xl font-extrabold text-slate-300">{crosses}</span>
+                <p className="text-[10px] text-slate-500 mt-1 font-bold">CROSSES</p>
               </div>
-              <div className="bg-slate-950 p-2.5 rounded-lg border border-slate-900">
-                <span className="text-xl sm:text-2xl font-extrabold text-amber-400">{combosCount}</span>
-                <p className="text-[9px] text-slate-500 mt-0.5">COMBOS</p>
+              <div className="bg-slate-950 p-3 rounded-xl border border-slate-900">
+                <span className="text-2xl font-extrabold text-amber-400">{combosCount}</span>
+                <p className="text-[10px] text-slate-500 mt-1 font-bold">COMBOS</p>
               </div>
             </div>
 
             {lastPunch && (
-              <div className="bg-slate-950 p-2.5 rounded-lg border border-slate-900 text-xs flex justify-between items-center">
+              <div className="bg-slate-950 p-3 rounded-xl border border-slate-900 text-xs flex justify-between items-center">
                 <span className="text-slate-400">
                   Apex: <strong className={`${currentTheme.primary} uppercase`}>{lastPunch.type}</strong>
                 </span>
-                <span className="text-slate-400 text-[11px]">
+                <span className="text-slate-300 font-mono text-[11px]">
                   {lastPunch.peakVelocity} m/s | {lastPunch.elbowAngle}°
                 </span>
               </div>
             )}
           </div>
 
-          {/* Personalized Continuous Learning Memory */}
-          <div className="bg-slate-900/60 border border-slate-900 rounded-xl p-3.5 text-xs space-y-2">
-            <span className="text-[10px] text-slate-500 flex items-center gap-1 uppercase tracking-wider font-bold">
-              <TrendingUp className="w-3.5 h-3.5 text-slate-400" /> Continuous User Memory
+          {/* Continuous Learning Memory */}
+          <div className="bg-slate-900/60 border border-slate-900 rounded-2xl p-4 text-xs space-y-2.5">
+            <span className="text-[10px] text-slate-500 flex items-center gap-1.5 uppercase tracking-wider font-bold">
+              <TrendingUp className="w-4 h-4 text-slate-400" /> Continuous User Memory
             </span>
             <div className="flex justify-between text-slate-400">
               <span>Saved Punches:</span>
               <strong className="text-slate-200 font-mono">{userStats.samplesCount}</strong>
             </div>
             <div className="flex justify-between text-slate-400">
-              <span>Personal Extension Averages:</span>
+              <span>Extension Averages:</span>
               <strong className="text-slate-200 font-mono">{userStats.avgJabAngle}° Jab / {userStats.avgCrossAngle}° Cross</strong>
             </div>
           </div>
 
           {/* AI Diagnostic Alert */}
           {aiAdvice && (
-            <div className={`p-3.5 rounded-xl border transition-all duration-300 ${
+            <div className={`p-4 rounded-2xl border transition-all duration-300 ${
               aiAdvice.severity === 'critical'
                 ? 'bg-red-950/30 border-red-900/50 text-red-300'
                 : aiAdvice.severity === 'warning'
@@ -447,38 +447,72 @@ export default function App() {
         </div>
       </div>
 
+      {/* Mobile Ergonomic Bottom Sticky Action Bar */}
+      <div className="sm:hidden fixed bottom-0 left-0 right-0 bg-slate-950/95 backdrop-blur-lg border-t border-slate-800/80 p-2.5 z-40 flex items-center justify-around gap-2 shadow-2xl">
+        <button
+          onClick={startCamera}
+          disabled={isLoadingModel}
+          className="flex-1 flex flex-col items-center justify-center h-12 bg-slate-900 active:bg-slate-800 text-slate-200 border border-slate-800 rounded-xl text-[10px] font-bold touch-manipulation"
+        >
+          <Camera className="w-4 h-4 mb-0.5 text-cyan-400" />
+          <span>Camera</span>
+        </button>
+
+        <label className="flex-1 flex flex-col items-center justify-center h-12 bg-slate-900 active:bg-slate-800 text-slate-200 border border-slate-800 rounded-xl text-[10px] font-bold cursor-pointer touch-manipulation">
+          <Upload className="w-4 h-4 mb-0.5 text-slate-400" />
+          <span>Upload</span>
+          <input type="file" accept="video/*" onChange={handleVideoUpload} className="hidden" />
+        </label>
+
+        <button
+          onClick={() => setShowSettingsDrawer(true)}
+          className="flex-1 flex flex-col items-center justify-center h-12 bg-slate-900 active:bg-slate-800 text-slate-300 border border-slate-800 rounded-xl text-[10px] font-bold touch-manipulation"
+        >
+          <Settings className="w-4 h-4 mb-0.5 text-slate-400" />
+          <span>Settings</span>
+        </button>
+
+        <button
+          onClick={handleReset}
+          className="w-12 h-12 flex items-center justify-center bg-slate-900 active:bg-slate-800 text-slate-400 border border-slate-800 rounded-xl touch-manipulation shrink-0"
+          title="Reset Session"
+        >
+          <RotateCcw className="w-4 h-4" />
+        </button>
+      </div>
+
       {/* Brawler-Style Sliding App Settings Drawer */}
       {showSettingsDrawer && (
-        <div className="fixed inset-0 z-50 flex justify-end bg-black/70 backdrop-blur-sm transition-all">
+        <div className="fixed inset-0 z-50 flex justify-end bg-black/75 backdrop-blur-sm transition-all">
           <div className="w-full max-w-md bg-slate-950 border-l border-slate-800 h-full p-5 flex flex-col justify-between overflow-y-auto">
-            <div className="space-y-5">
+            <div className="space-y-6">
               
               {/* Drawer Header */}
-              <div className="flex justify-between items-center border-b border-slate-900 pb-3">
+              <div className="flex justify-between items-center border-b border-slate-900 pb-4">
                 <div className="flex items-center gap-2">
-                  <Sliders className="w-4 h-4 text-slate-400" />
-                  <h2 className="text-sm font-bold uppercase tracking-wider text-slate-200">Brawler Preferences</h2>
+                  <Sliders className="w-5 h-5 text-slate-400" />
+                  <h2 className="text-sm font-bold uppercase tracking-wider text-slate-200">App Preferences</h2>
                 </div>
                 <button
                   onClick={() => setShowSettingsDrawer(false)}
-                  className="p-1.5 text-slate-500 hover:text-slate-300 bg-slate-900 rounded-lg border border-slate-800"
+                  className="w-10 h-10 flex items-center justify-center text-slate-400 bg-slate-900 rounded-xl border border-slate-800 touch-manipulation"
                 >
-                  <X className="w-4 h-4" />
+                  <X className="w-5 h-5" />
                 </button>
               </div>
 
               {/* Theme Selector */}
-              <div className="space-y-2">
+              <div className="space-y-2.5">
                 <label className="text-xs text-slate-500 block uppercase font-bold">Theme Palette</label>
                 <div className="grid grid-cols-3 gap-2">
                   {(['bivol', 'ggg', 'loma'] as Theme[]).map((t) => (
                     <button
                       key={t}
                       onClick={() => setActiveTheme(t)}
-                      className={`py-2 px-3 rounded-lg border text-xs capitalize transition-all ${
+                      className={`h-11 rounded-xl border text-xs capitalize transition-all touch-manipulation font-bold ${
                         activeTheme === t
-                          ? 'bg-slate-900 border-slate-700 text-slate-100 font-bold'
-                          : 'bg-slate-950 border-slate-900 text-slate-500 hover:text-slate-400'
+                          ? 'bg-slate-900 border-slate-700 text-slate-100'
+                          : 'bg-slate-950 border-slate-900 text-slate-500'
                       }`}
                     >
                       {t}
@@ -488,14 +522,14 @@ export default function App() {
               </div>
 
               {/* Speech AI Settings */}
-              <div className="space-y-2">
+              <div className="space-y-2.5">
                 <label className="text-xs text-slate-500 block uppercase font-bold">Voice Coaching & Audio</label>
                 <button
                   onClick={() => setAudioFeedback(!audioFeedback)}
-                  className="w-full p-3 bg-slate-900 border border-slate-800 rounded-xl text-left flex justify-between items-center"
+                  className="w-full h-14 px-4 bg-slate-900 border border-slate-800 rounded-xl text-left flex justify-between items-center touch-manipulation"
                 >
-                  <div className="flex items-center gap-2">
-                    {audioFeedback ? <Volume2 className="w-4 h-4 text-emerald-400" /> : <VolumeX className="w-4 h-4 text-slate-500" />}
+                  <div className="flex items-center gap-2.5">
+                    {audioFeedback ? <Volume2 className="w-5 h-5 text-emerald-400" /> : <VolumeX className="w-5 h-5 text-slate-500" />}
                     <span className="text-xs text-slate-300">Live Voice Correction</span>
                   </div>
                   <span className={`text-xs font-bold ${audioFeedback ? 'text-emerald-400' : 'text-slate-500'}`}>
@@ -505,19 +539,19 @@ export default function App() {
               </div>
 
               {/* Camera Preferences */}
-              <div className="space-y-2">
+              <div className="space-y-2.5">
                 <label className="text-xs text-slate-500 block uppercase font-bold">Camera Feed Controls</label>
                 <div className="grid grid-cols-2 gap-2">
                   <button
                     onClick={() => setMirrorVideo(!mirrorVideo)}
-                    className="p-3 bg-slate-900 border border-slate-800 rounded-xl text-left"
+                    className="h-14 p-3 bg-slate-900 border border-slate-800 rounded-xl text-left touch-manipulation"
                   >
                     <div className="text-[10px] text-slate-500">Mirror Feed</div>
                     <div className="text-xs font-bold text-slate-200 mt-0.5">{mirrorVideo ? 'ACTIVE' : 'OFF'}</div>
                   </button>
                   <button
                     onClick={() => setShowSkeleton(!showSkeleton)}
-                    className="p-3 bg-slate-900 border border-slate-800 rounded-xl text-left"
+                    className="h-14 p-3 bg-slate-900 border border-slate-800 rounded-xl text-left touch-manipulation"
                   >
                     <div className="text-[10px] text-slate-500">Skeleton Wireframe</div>
                     <div className="text-xs font-bold text-slate-200 mt-0.5">{showSkeleton ? 'VISIBLE' : 'HIDDEN'}</div>
@@ -526,14 +560,14 @@ export default function App() {
               </div>
 
               {/* Quality Preset */}
-              <div className="space-y-2">
+              <div className="space-y-2.5">
                 <label className="text-xs text-slate-500 block uppercase font-bold">Target Resolution</label>
                 <div className="grid grid-cols-2 gap-2">
                   {(['720p', '1080p'] as const).map((q) => (
                     <button
                       key={q}
                       onClick={() => setCameraQuality(q)}
-                      className={`p-2.5 rounded-xl border text-xs text-center font-bold transition-all ${
+                      className={`h-11 rounded-xl border text-xs text-center font-bold transition-all touch-manipulation ${
                         cameraQuality === q
                           ? 'bg-slate-900 border-slate-700 text-slate-200'
                           : 'bg-slate-950 border-slate-900 text-slate-500'
@@ -553,15 +587,15 @@ export default function App() {
                     setUserStats(userDataRef.current.getUserStats());
                     alert('Local user memory cleared.');
                   }}
-                  className="w-full p-3 bg-red-950/30 border border-red-900/50 text-red-400 rounded-xl text-xs font-bold text-center hover:bg-red-950/50 transition-all"
+                  className="w-full h-12 bg-red-950/30 border border-red-900/50 text-red-400 rounded-xl text-xs font-bold text-center active:bg-red-950/50 transition-all touch-manipulation"
                 >
                   Reset User Training Memory
                 </button>
               </div>
             </div>
 
-            <div className="text-[10px] text-slate-600 text-center border-t border-slate-900 pt-3">
-              Brawler Boxing Labs v2.0 • On-Device Biomechanical Learning
+            <div className="text-[10px] text-slate-600 text-center border-t border-slate-900 pt-4 mt-6">
+              Brawler Boxing Labs v2.0 • On-Device Kinetic Learning
             </div>
           </div>
         </div>
