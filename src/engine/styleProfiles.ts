@@ -3,8 +3,8 @@ export interface StyleProfile {
   name: string;
   nickname: string;
   description: string;
-  minExtensionAngle: number; // Preferred minimum elbow angle at peak impact
-  guardThresholdY: number;    // Vertical tolerance for off-hand guard dropping
+  minExtensionAngle: number;
+  guardThresholdY: number;
   preferredStance: 'orthodox' | 'southpaw';
 }
 
