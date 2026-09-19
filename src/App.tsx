@@ -19,6 +19,7 @@ import {
 } from "lucide-react";
 
 import { MediaPipeTracker } from "./tracking/MediaPipeTracker";
+import { convertVideoToCompatibleMP4 } from "./engine/videoConverter";
 import { analyzePose, detectPunch } from "./engine/analyzer";
 import { coach, compareStyle, STYLES } from "./engine/coach";
 import { Landmark, Metrics, Punch } from "./types";
@@ -56,17 +57,38 @@ export default function App() {
   const runningRef = useRef(false);
   const readyRef = useRef(false);
 
-  const [mode, setMode] = useState<"idle" | "camera" | "upload">("idle");
+  const objectUrl = useRef<string | null>(null);
+
+  const [mode, setMode] = useState<
+    "idle" | "camera" | "upload"
+  >("idle");
+
   const [running, setRunning] = useState(false);
   const [ready, setReady] = useState(false);
 
-  const [landmarks, setLandmarks] = useState<Landmark[] | null>(null);
-  const [metrics, setMetrics] = useState<Metrics>(empty);
+  const [landmarks, setLandmarks] =
+    useState<Landmark[] | null>(null);
 
-  const [styleKey, setStyleKey] = useState("bivol");
-  const [lastPunch, setLastPunch] = useState<Punch>();
-  const [error, setError] = useState("");
-  const [videoName, setVideoName] = useState("");
+  const [metrics, setMetrics] =
+    useState<Metrics>(empty);
+
+  const [styleKey, setStyleKey] =
+    useState("bivol");
+
+  const [lastPunch, setLastPunch] =
+    useState<Punch>();
+
+  const [error, setError] =
+    useState("");
+
+  const [videoName, setVideoName] =
+    useState("");
+
+  const [converting, setConverting] =
+    useState(false);
+
+  const [conversionProgress, setConversionProgress] =
+    useState(0);
 
   const style = STYLES[styleKey];
 
@@ -86,9 +108,16 @@ export default function App() {
         cancelAnimationFrame(raf.current);
       }
 
-      const stream = video.current?.srcObject as MediaStream | null;
+      const stream =
+        video.current?.srcObject as MediaStream | null;
 
-      stream?.getTracks().forEach((track) => track.stop());
+      stream?.getTracks().forEach((track) =>
+        track.stop()
+      );
+
+      if (objectUrl.current) {
+        URL.revokeObjectURL(objectUrl.current);
+      }
     };
   }, []);
 
@@ -126,15 +155,21 @@ export default function App() {
         return;
       }
 
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: {
-          width: 1280,
-          height: 720,
-          facingMode: "user",
-        },
-        audio: false,
-      });
+      const stream =
+        await navigator.mediaDevices.getUserMedia({
+          video: {
+            width: {
+              ideal: 1280,
+            },
+            height: {
+              ideal: 720,
+            },
+            facingMode: "user",
+          },
+          audio: false,
+        });
 
+      video.current.src = "";
       video.current.srcObject = stream;
       video.current.controls = false;
       video.current.muted = true;
@@ -157,13 +192,21 @@ export default function App() {
 
       loop();
     } catch (e) {
-      console.error(e);
+      console.error(
+        "Camera initialization error:",
+        e
+      );
 
       runningRef.current = false;
       setRunning(false);
 
+      const message =
+        e instanceof Error
+          ? e.message
+          : "Unknown camera error.";
+
       setError(
-        "Camera or model initialization failed. Use HTTPS/localhost and allow camera access."
+        `Camera initialization failed: ${message}`
       );
     }
   }
@@ -177,16 +220,165 @@ export default function App() {
       raf.current = 0;
     }
 
-    const stream = video.current?.srcObject as MediaStream | null;
+    const stream =
+      video.current?.srcObject as MediaStream | null;
 
-    stream?.getTracks().forEach((track) => track.stop());
+    stream?.getTracks().forEach((track) =>
+      track.stop()
+    );
 
     if (video.current) {
       video.current.srcObject = null;
+      video.current.removeAttribute("src");
+      video.current.load();
     }
 
     setMode("idle");
     modeRef.current = "idle";
+  }
+
+  async function loadVideoFile(file: File) {
+    if (!video.current) {
+      throw new Error(
+        "Video element is unavailable."
+      );
+    }
+
+    const currentVideo = video.current;
+
+    if (objectUrl.current) {
+      URL.revokeObjectURL(objectUrl.current);
+      objectUrl.current = null;
+    }
+
+    const url = URL.createObjectURL(file);
+
+    objectUrl.current = url;
+
+    currentVideo.srcObject = null;
+    currentVideo.src = url;
+    currentVideo.controls = true;
+    currentVideo.muted = true;
+    currentVideo.playsInline = true;
+
+    currentVideo.load();
+
+    await new Promise<void>((resolve, reject) => {
+      let finished = false;
+
+      const cleanup = () => {
+        currentVideo.removeEventListener(
+          "loadedmetadata",
+          handleLoaded
+        );
+
+        currentVideo.removeEventListener(
+          "canplay",
+          handleCanPlay
+        );
+
+        currentVideo.removeEventListener(
+          "error",
+          handleError
+        );
+      };
+
+      const succeed = () => {
+        if (finished) return;
+
+        finished = true;
+        cleanup();
+        resolve();
+      };
+
+      const fail = () => {
+        if (finished) return;
+
+        finished = true;
+        cleanup();
+
+        const mediaError =
+          currentVideo.error;
+
+        if (mediaError) {
+          const errorCode =
+            mediaError.code;
+
+          const errorMessage =
+            mediaError.message ||
+            "The browser could not decode this video.";
+
+          reject(
+            new Error(
+              `Video decoder error ${errorCode}: ${errorMessage}`
+            )
+          );
+        } else {
+          reject(
+            new Error(
+              "The browser could not decode this video."
+            )
+          );
+        }
+      };
+
+      function handleLoaded() {
+        if (
+          currentVideo.videoWidth > 0 &&
+          currentVideo.videoHeight > 0
+        ) {
+          succeed();
+        }
+      }
+
+      function handleCanPlay() {
+        succeed();
+      }
+
+      function handleError() {
+        fail();
+      }
+
+      currentVideo.addEventListener(
+        "loadedmetadata",
+        handleLoaded
+      );
+
+      currentVideo.addEventListener(
+        "canplay",
+        handleCanPlay
+      );
+
+      currentVideo.addEventListener(
+        "error",
+        handleError
+      );
+    });
+
+    if (
+      !currentVideo.videoWidth ||
+      !currentVideo.videoHeight
+    ) {
+      throw new Error(
+        "The video has no readable video frames."
+      );
+    }
+  }
+
+  async function tryOriginalVideo(file: File) {
+    await loadVideoFile(file);
+
+    if (!video.current) {
+      throw new Error(
+        "Video element unavailable."
+      );
+    }
+
+    await initializeTracker();
+
+    resetFrameTracking();
+
+    await video.current.play();
   }
 
   async function handleVideoUpload(
@@ -194,107 +386,111 @@ export default function App() {
   ) {
     const file = event.target.files?.[0];
 
+    event.target.value = "";
+
     if (!file || !video.current) {
       return;
     }
 
     try {
       setError("");
+      setConverting(false);
+      setConversionProgress(0);
+
+      runningRef.current = false;
+      setRunning(false);
 
       if (raf.current) {
         cancelAnimationFrame(raf.current);
         raf.current = 0;
       }
 
-      const oldStream = video.current.srcObject as MediaStream | null;
+      const oldStream =
+        video.current.srcObject as MediaStream | null;
 
-      oldStream?.getTracks().forEach((track) => track.stop());
+      oldStream?.getTracks().forEach((track) =>
+        track.stop()
+      );
 
       video.current.srcObject = null;
 
-      const url = URL.createObjectURL(file);
-
-      video.current.src = url;
-      video.current.controls = true;
-      video.current.muted = true;
-      video.current.playsInline = true;
-
       modeRef.current = "upload";
-      runningRef.current = false;
 
       setMode("upload");
-      setRunning(false);
       setVideoName(file.name);
 
       resetAnalysisOnly();
 
-      video.current.load();
-
-      await new Promise<void>((resolve, reject) => {
-        const currentVideo = video.current;
-
-        if (!currentVideo) {
-          reject(new Error("Video element unavailable."));
-          return;
-        }
-
-        const handleLoaded = () => {
-          cleanup();
-          resolve();
-        };
-
-        const handleError = () => {
-          cleanup();
-          reject(
-            new Error(
-              "The browser could not decode this video format."
-            )
-          );
-        };
-
-        const cleanup = () => {
-          currentVideo.removeEventListener(
-            "loadeddata",
-            handleLoaded
-          );
-          currentVideo.removeEventListener(
-            "error",
-            handleError
-          );
-        };
-
-        currentVideo.addEventListener(
-          "loadeddata",
-          handleLoaded
+      /*
+       * First try the original file.
+       *
+       * This means compatible MP4/H.264 videos do not
+       * need to be converted.
+       */
+      try {
+        await tryOriginalVideo(file);
+      } catch (originalError) {
+        console.warn(
+          "Original video could not be analyzed.",
+          originalError
         );
 
-        currentVideo.addEventListener(
-          "error",
-          handleError
+        /*
+         * The browser may be able to play the file but
+         * still not provide a format that works reliably
+         * with the analysis pipeline.
+         *
+         * Fall back to browser-side H.264 conversion.
+         */
+
+        setConverting(true);
+        setConversionProgress(0);
+
+        const converted =
+          await convertVideoToCompatibleMP4(
+            file,
+            (progress) => {
+              setConversionProgress(progress);
+            }
+          );
+
+        setVideoName(
+          `${file.name} → compatible MP4`
         );
-      });
 
-      await initializeTracker();
+        await loadVideoFile(converted);
 
-      resetFrameTracking();
+        await initializeTracker();
 
-      await video.current.play();
+        resetFrameTracking();
+
+        await video.current.play();
+
+        setConverting(false);
+        setConversionProgress(1);
+      }
 
       runningRef.current = true;
       setRunning(true);
 
       loop();
     } catch (e) {
-      console.error("Video analysis error:", e);
+      console.error(
+        "Video analysis error:",
+        e
+      );
 
       runningRef.current = false;
       setRunning(false);
+      setConverting(false);
 
       const message =
-        e instanceof Error ? e.message : String(e);
+        e instanceof Error
+          ? e.message
+          : "Unknown video processing error.";
 
       setError(
-        `The video loaded, but pose analysis could not start. ${message}`
+        `This video could not be prepared for analysis. ${message}`
       );
     }
   }
@@ -329,9 +525,13 @@ export default function App() {
       currentVideo.readyState >= 2 &&
       !currentVideo.seeking
     ) {
-      const videoTime = currentVideo.currentTime;
+      const videoTime =
+        currentVideo.currentTime;
 
-      if (videoTime !== lastVideoTime.current) {
+      if (
+        videoTime !==
+        lastVideoTime.current
+      ) {
         const now = Math.max(
           performance.now(),
           lastInferenceTimestamp.current + 1
@@ -339,9 +539,13 @@ export default function App() {
 
         let dt = 1 / 30;
 
-        if (previousVideoTime.current !== null) {
+        if (
+          previousVideoTime.current !==
+          null
+        ) {
           const difference =
-            videoTime - previousVideoTime.current;
+            videoTime -
+            previousVideoTime.current;
 
           if (difference > 0) {
             dt = difference;
@@ -349,28 +553,31 @@ export default function App() {
         }
 
         try {
-          const lm = tracker.current.detect(
-            currentVideo,
-            now
-          );
+          const lm =
+            tracker.current.detect(
+              currentVideo,
+              now
+            );
 
           if (lm) {
             const m = analyzePose(lm);
 
             if (m) {
-              const punch = detectPunch(
-                previous.current,
-                lm,
-                dt,
-                now
-              );
+              const punch =
+                detectPunch(
+                  previous.current,
+                  lm,
+                  dt,
+                  now
+                );
 
               if (punch) {
                 setLastPunch(punch);
 
                 setMetrics((prev) => ({
                   ...m,
-                  punches: prev.punches + 1,
+                  punches:
+                    prev.punches + 1,
                   peakSpeed: Math.max(
                     prev.peakSpeed,
                     punch.speed
@@ -380,9 +587,12 @@ export default function App() {
               } else {
                 setMetrics((prev) => ({
                   ...m,
-                  speed: prev.speed * 0.92,
-                  peakSpeed: prev.peakSpeed,
-                  punches: prev.punches,
+                  speed:
+                    prev.speed * 0.92,
+                  peakSpeed:
+                    prev.peakSpeed,
+                  punches:
+                    prev.punches,
                 }));
               }
             }
@@ -391,26 +601,39 @@ export default function App() {
             setLandmarks(lm);
           }
 
-          lastVideoTime.current = videoTime;
-          previousVideoTime.current = videoTime;
-          lastInferenceTimestamp.current = now;
+          lastVideoTime.current =
+            videoTime;
+
+          previousVideoTime.current =
+            videoTime;
+
+          lastInferenceTimestamp.current =
+            now;
         } catch (e) {
-          console.error("Pose detection error:", e);
+          console.error(
+            "Pose detection error:",
+            e
+          );
 
           runningRef.current = false;
           setRunning(false);
 
           const message =
-            e instanceof Error ? e.message : String(e);
+            e instanceof Error
+              ? e.message
+              : "Unknown pose analysis error.";
 
-          setError(`Pose analysis stopped. ${message}`);
+          setError(
+            `Pose analysis stopped: ${message}`
+          );
 
           return;
         }
       }
     }
 
-    raf.current = requestAnimationFrame(loop);
+    raf.current =
+      requestAnimationFrame(loop);
   }
 
   function reset() {
@@ -420,7 +643,8 @@ export default function App() {
   function handleVideoPlay() {
     if (
       modeRef.current === "upload" &&
-      !runningRef.current
+      !runningRef.current &&
+      !converting
     ) {
       runningRef.current = true;
       setRunning(true);
@@ -431,21 +655,30 @@ export default function App() {
   }
 
   function handleVideoPause() {
-    if (modeRef.current === "upload") {
+    if (
+      modeRef.current === "upload"
+    ) {
       runningRef.current = false;
       setRunning(false);
 
       if (raf.current) {
-        cancelAnimationFrame(raf.current);
+        cancelAnimationFrame(
+          raf.current
+        );
+
         raf.current = 0;
       }
     }
   }
 
   function handleVideoSeeking() {
-    if (modeRef.current === "upload") {
+    if (
+      modeRef.current === "upload"
+    ) {
       lastVideoTime.current = -1;
-      previousVideoTime.current = null;
+      previousVideoTime.current =
+        null;
+
       previous.current = null;
     }
   }
@@ -455,7 +688,10 @@ export default function App() {
     setRunning(false);
 
     if (raf.current) {
-      cancelAnimationFrame(raf.current);
+      cancelAnimationFrame(
+        raf.current
+      );
+
       raf.current = 0;
     }
   }
@@ -471,8 +707,13 @@ export default function App() {
           />
 
           <div>
-            <h1>Bivol Boxing Lab</h1>
-            <p>REAL-TIME BIOMECHANICS COACH</p>
+            <h1>
+              Bivol Boxing Lab
+            </h1>
+
+            <p>
+              REAL-TIME BIOMECHANICS COACH
+            </p>
           </div>
         </div>
 
@@ -482,7 +723,10 @@ export default function App() {
               ready ? "online" : ""
             }`}
           />
-          {ready ? "MODEL READY" : "MODEL OFFLINE"}
+
+          {ready
+            ? "MODEL READY"
+            : "MODEL OFFLINE"}
         </div>
       </header>
 
@@ -491,7 +735,10 @@ export default function App() {
           <button
             className="primary-button"
             onClick={startCamera}
-            disabled={running && mode === "camera"}
+            disabled={
+              running &&
+              mode === "camera"
+            }
           >
             <Camera size={18} />
             Live Camera
@@ -499,34 +746,69 @@ export default function App() {
 
           <label className="secondary-button upload-button">
             <Upload size={18} />
-            Upload Video
+            {converting
+              ? "Converting..."
+              : "Upload Video"}
 
             <input
               type="file"
-              accept="video/*"
-              onChange={handleVideoUpload}
+              accept="video/*,.mov,.mp4,.m4v,.webm,.avi,.mkv"
+              onChange={
+                handleVideoUpload
+              }
               hidden
+              disabled={converting}
             />
           </label>
 
-          {mode === "camera" && running && (
-            <button
-              className="danger-button"
-              onClick={stopCamera}
-            >
-              <Square size={18} />
-              Stop
-            </button>
-          )}
+          {mode === "camera" &&
+            running && (
+              <button
+                className="danger-button"
+                onClick={stopCamera}
+              >
+                <Square size={18} />
+                Stop
+              </button>
+            )}
 
           <button
             className="secondary-button"
             onClick={reset}
+            disabled={converting}
           >
             <RotateCcw size={18} />
             Reset
           </button>
         </div>
+
+        {converting && (
+          <div className="conversion-status">
+            <div>
+              Preparing video for
+              cross-device analysis...
+            </div>
+
+            <div className="conversion-bar">
+              <div
+                className="conversion-progress"
+                style={{
+                  width: `${
+                    conversionProgress *
+                    100
+                  }%`,
+                }}
+              />
+            </div>
+
+            <span>
+              {Math.round(
+                conversionProgress * 100
+              )}
+              %
+            </span>
+          </div>
+        )}
 
         {videoName && (
           <div className="video-name">
@@ -551,34 +833,51 @@ export default function App() {
             muted
             onPlay={handleVideoPlay}
             onPause={handleVideoPause}
-            onSeeking={handleVideoSeeking}
-            onEnded={handleVideoEnded}
+            onSeeking={
+              handleVideoSeeking
+            }
+            onEnded={
+              handleVideoEnded
+            }
           />
 
           {landmarks && (
-            <SkeletonOverlay landmarks={landmarks} />
+            <SkeletonOverlay
+              landmarks={landmarks}
+            />
           )}
 
-          {!video.current?.src && (
-            <div className="video-placeholder">
-              <Activity size={48} />
-              <h2>Ready to Analyze</h2>
-              <p>
-                Start your camera or upload a boxing video.
-              </p>
-            </div>
-          )}
+          {!video.current?.src &&
+            !video.current?.srcObject && (
+              <div className="video-placeholder">
+                <Activity size={48} />
+
+                <h2>
+                  Ready to Analyze
+                </h2>
+
+                <p>
+                  Start your camera or
+                  upload a boxing video.
+                </p>
+              </div>
+            )}
         </div>
       </section>
 
       <section className="style-panel">
         <div className="section-title">
           <h2>Style Target</h2>
-          <span>Compare your mechanics</span>
+
+          <span>
+            Compare your mechanics
+          </span>
         </div>
 
         <div className="style-buttons">
-          {Object.entries(STYLES).map(
+          {Object.entries(
+            STYLES
+          ).map(
             ([key, targetStyle]) => (
               <button
                 key={key}
@@ -587,7 +886,9 @@ export default function App() {
                     ? "style-button active"
                     : "style-button"
                 }
-                onClick={() => setStyleKey(key)}
+                onClick={() =>
+                  setStyleKey(key)
+                }
               >
                 {targetStyle.name}
               </button>
@@ -600,38 +901,50 @@ export default function App() {
         <MetricCard
           title="Form"
           value={metrics.form}
-          icon={<Gauge size={20} />}
+          icon={
+            <Gauge size={20} />
+          }
         />
 
         <MetricCard
           title="Footwork"
           value={metrics.footwork}
-          icon={<Footprints size={20} />}
+          icon={
+            <Footprints size={20} />
+          }
         />
 
         <MetricCard
           title="Guard"
           value={metrics.guard}
-          icon={<Shield size={20} />}
+          icon={
+            <Shield size={20} />
+          }
         />
 
         <MetricCard
           title="Balance"
           value={metrics.balance}
-          icon={<Activity size={20} />}
+          icon={
+            <Activity size={20} />
+          }
         />
 
         <MetricCard
           title="Punch Speed"
           value={metrics.speed}
           suffix=" px/s"
-          icon={<Gauge size={20} />}
+          icon={
+            <Gauge size={20} />
+          }
         />
 
         <MetricCard
           title="Punches"
           value={metrics.punches}
-          icon={<Activity size={20} />}
+          icon={
+            <Activity size={20} />
+          }
         />
       </section>
 
@@ -645,42 +958,71 @@ export default function App() {
         <div className="stats-card">
           <div className="section-title">
             <h2>Biomechanics</h2>
-            <span>Live measurements</span>
+
+            <span>
+              Live measurements
+            </span>
           </div>
 
           <div className="stats-list">
             <div>
-              <span>Peak Speed</span>
+              <span>
+                Peak Speed
+              </span>
+
               <strong>
-                {metrics.peakSpeed.toFixed(1)}
+                {metrics.peakSpeed.toFixed(
+                  1
+                )}
               </strong>
             </div>
 
             <div>
-              <span>Stance Width</span>
+              <span>
+                Stance Width
+              </span>
+
               <strong>
-                {metrics.stanceWidth.toFixed(3)}
+                {metrics.stanceWidth.toFixed(
+                  3
+                )}
               </strong>
             </div>
 
             <div>
-              <span>Head Drift</span>
+              <span>
+                Head Drift
+              </span>
+
               <strong>
-                {metrics.headDrift.toFixed(3)}
+                {metrics.headDrift.toFixed(
+                  3
+                )}
               </strong>
             </div>
 
             <div>
-              <span>Recovery</span>
+              <span>
+                Recovery
+              </span>
+
               <strong>
-                {metrics.recoveryMs.toFixed(0)} ms
+                {metrics.recoveryMs.toFixed(
+                  0
+                )}{" "}
+                ms
               </strong>
             </div>
 
             <div>
-              <span>Foot Drift</span>
+              <span>
+                Foot Drift
+              </span>
+
               <strong>
-                {metrics.footDrift.toFixed(3)}
+                {metrics.footDrift.toFixed(
+                  3
+                )}
               </strong>
             </div>
           </div>
