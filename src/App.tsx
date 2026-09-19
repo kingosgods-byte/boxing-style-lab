@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Target, Activity, RotateCcw, Camera, Upload, Settings, UserCheck, X, Sliders, Volume2, VolumeX, Cpu, Flame, Play, Square, Timer, Award, CloudUpload } from 'lucide-react';
+import { Target, Activity, RotateCcw, Camera, Upload, Settings, UserCheck, X, Sliders, Volume2, VolumeX, Cpu, Flame, Play, Square, Timer, Award, Cloud } from 'lucide-react';
 import { PoseLandmarker, FilesetResolver } from '@mediapipe/tasks-vision';
 
 import { SovietPunchAnalyzer, PunchEvent } from './engine/punchDetector';
@@ -279,7 +279,6 @@ export default function App() {
         if (prev === 1) {
           clearInterval(countInterval);
           
-          // Start MediaRecorder capture
           recordedChunksRef.current = [];
           try {
             const recorder = new MediaRecorder(mediaStreamRef.current!, { mimeType: 'video/webm;codecs=vp9' });
@@ -289,7 +288,6 @@ export default function App() {
             recorder.start();
             mediaRecorderRef.current = recorder;
           } catch (e) {
-            console.warn('VP9 codec unsupported, using default recorder settings');
             const recorder = new MediaRecorder(mediaStreamRef.current!);
             recorder.ondataavailable = (event) => {
               if (event.data.size > 0) recordedChunksRef.current.push(event.data);
@@ -520,7 +518,7 @@ export default function App() {
 
             {isUploading && (
               <div className="flex items-center justify-center gap-2 text-xs text-amber-400 py-1 animate-pulse">
-                <CloudUpload className="w-4 h-4" /> Uploading video & telemetry to Supabase...
+                <Cloud className="w-4 h-4" /> Uploading video & telemetry to Supabase...
               </div>
             )}
           </div>
