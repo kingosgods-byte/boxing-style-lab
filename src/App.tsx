@@ -421,12 +421,6 @@ export default function App() {
 
       resetAnalysisOnly();
 
-      /*
-       * First try the original file.
-       *
-       * This means compatible MP4/H.264 videos do not
-       * need to be converted.
-       */
       try {
         await tryOriginalVideo(file);
       } catch (originalError) {
@@ -434,14 +428,6 @@ export default function App() {
           "Original video could not be analyzed.",
           originalError
         );
-
-        /*
-         * The browser may be able to play the file but
-         * still not provide a format that works reliably
-         * with the analysis pipeline.
-         *
-         * Fall back to browser-side H.264 conversion.
-         */
 
         setConverting(true);
         setConversionProgress(0);
@@ -701,7 +687,7 @@ export default function App() {
       <header className="topbar">
         <div className="brand-area">
           <img
-            src="/boxing-style-lab/logo.png"
+            src={`${import.meta.env.BASE_URL}logo.png`}
             alt="Bivol Boxing Lab"
             className="app-logo"
           />
