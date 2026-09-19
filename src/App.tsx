@@ -74,6 +74,7 @@ export default function App() {
   const landmarkerRef = useRef<PoseLandmarker | null>(null);
   const animFrameRef = useRef<number | null>(null);
   const timerIntervalRef = useRef<number | null>(null);
+  const wakeLockRef = useRef<any | null>(null);
 
   // MediaRecorder Refs
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
@@ -113,15 +114,40 @@ export default function App() {
     return () => {
       if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
       if (timerIntervalRef.current) clearInterval(timerIntervalRef.current);
+      releaseWakeLock();
     };
   }, []);
 
+  // Screen Wake Lock Handler to keep iPhone screen awake during workout sessions
+  const requestWakeLock = async () => {
+    try {
+      if ('wakeLock' in navigator) {
+        wakeLockRef.current = await (navigator as any).wakeLock.request('screen');
+      }
+    } catch (err) {
+      console.log('Wake Lock request failed:', err);
+    }
+  };
+
+  const releaseWakeLock = async () => {
+    try {
+      if (wakeLockRef.current) {
+        await wakeLockRef.current.release();
+        wakeLockRef.current = null;
+      }
+    } catch (err) {
+      console.log('Wake Lock release failed:', err);
+    }
+  };
+
   useEffect(() => {
     if (isRecording) {
+      requestWakeLock();
       timerIntervalRef.current = window.setInterval(() => {
         setRecordingSeconds((prev) => prev + 1);
       }, 1000);
     } else {
+      releaseWakeLock();
       if (timerIntervalRef.current) clearInterval(timerIntervalRef.current);
     }
     return () => {
@@ -207,6 +233,11 @@ export default function App() {
   };
 
   const startCamera = async () => {
+    // Unlock speech synthesis on user interaction for Safari
+    if ('speechSynthesis' in window) {
+      window.speechSynthesis.speak(new SpeechSynthesisUtterance(''));
+    }
+
     try {
       const constraints: MediaStreamConstraints = {
         video: {
@@ -231,11 +262,15 @@ export default function App() {
       if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
       processVideoFrame();
     } catch (err) {
-      alert('Camera access failed. Please ensure camera permissions are allowed in Safari/iOS settings.');
+      alert('Camera access failed. Please ensure camera permissions are allowed in your device settings.');
     }
   };
 
   const handleVideoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if ('speechSynthesis' in window) {
+      window.speechSynthesis.speak(new SpeechSynthesisUtterance(''));
+    }
+
     const file = e.target.files?.[0];
     if (file && videoRef.current) {
       const url = URL.createObjectURL(file);
@@ -249,7 +284,7 @@ export default function App() {
         if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
         processVideoFrame();
       }).catch((err) => {
-        console.error("Autoplay prevented on iOS:", err);
+        console.error("Autoplay prevented:", err);
         alert("Please tap play or interact with the screen to start video analysis.");
       });
     }
@@ -389,7 +424,7 @@ export default function App() {
                 BRAWLER LABS
               </h1>
               <span className={`text-[9px] px-2 py-0.5 rounded border font-semibold ${currentTheme.badgeBg}`}>
-                iOS READY
+                MOBILE PRO
               </span>
             </div>
             <p className="text-[10px] text-slate-500">Biomechanical Cloud Analytics</p>
@@ -721,7 +756,7 @@ export default function App() {
             </div>
 
             <div className="text-[10px] text-slate-600 text-center border-t border-slate-900 pt-4 mt-6">
-              Brawler Boxing Labs v2.0 • iOS Optimized
+              Brawler Boxing Labs v2.0 • Mobile Optimized
             </div>
           </div>
         </div>
