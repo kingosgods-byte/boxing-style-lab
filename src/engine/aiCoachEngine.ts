@@ -1,38 +1,61 @@
-import { STYLE_PROFILES, StyleProfile } from './styleProfiles';
+import { FIGHTER_STYLES, StyleProfile } from './styleProfiles';
+import { UserStats } from './userDataEngine';
+
+export interface AIAdvice {
+  feedback: string;
+  metricLabel: string;
+  score: number;
+}
 
 export class AICoachEngine {
-  private activeProfile: StyleProfile;
+  public evaluatePunch(
+    punchType: 'jab' | 'cross',
+    landmarks: any[],
+    elbowAngle: number,
+    peakVelocity: number,
+    fighterId: string = 'SOVIET_CLASSIC',
+    userStats?: UserStats
+  ): AIAdvice | null {
+    if (!landmarks || landmarks.length < 29) return null;
 
-  constructor(profileKey: 'SOVIET_CLASSIC' | 'MEXICAN_PRESSURE') {
-    this.activeProfile = STYLE_PROFILES[profileKey];
-  }
+    const profile: StyleProfile = FIGHTER_STYLES[fighterId] || FIGHTER_STYLES.SOVIET_CLASSIC;
+    let feedback = '';
+    let score = 85;
 
-  public evaluatePosture(landmarks: any[]): string[] {
-    const feedback: string[] = [];
-    
-    // Extract key joints (MediaPipe Indices: Nose=0, Shoulders=11/12, Hips=23/24)
+    // Extract posture points for advanced 2026 style checking
     const nose = landmarks[0];
     const leftHip = landmarks[23];
     const rightHip = landmarks[24];
-    
-    // Calculate torso lean for slip/bait mechanics
     const hipCenterZ = (leftHip.z + rightHip.z) / 2;
-    const torsoLean = Math.abs(nose.x - (leftHip.x + rightHip.x) / 2);
+    const torsoLeanX = Math.abs(nose.x - (leftHip.x + rightHip.x) / 2);
 
-    if (this.activeProfile.allowHeadSlipBait) {
-      // Canelo style: Checking if user is successfully shifting weight back without losing balance
-      if (torsoLean > 0.15 && nose.z < hipCenterZ) {
-        feedback.push("Good weight transfer! Excellent reactive pull-back.");
+    if (profile.allowHeadSlipBait) {
+      // Canelo / Mexican Pressure style feedback
+      if (torsoLeanX > 0.12 && nose.z < hipCenterZ) {
+        feedback = "🔥 Perfect slip-counter weight shift! Great Canelo-style pull back.";
+        score = 98;
       } else {
-        feedback.push("Plant your feet and let them come to you—wait to counter off the slip.");
+        feedback = "Canelo Style: Keep weight balanced on back foot ready to counter off the slip.";
+        score = 80;
       }
     } else {
-      // Soviet style: Strict upright posture
-      if (torsoLean > 0.08) {
-        feedback.push("Torso leaning too far. Keep your spine vertical, Soviet style.");
+      // Soviet Strict style feedback
+      if (torsoLeanX > 0.08) {
+        feedback = "⚠️ Torso leaning too far. Maintain vertical Bivol-style posture.";
+        score = 72;
+      } else if (elbowAngle < profile.targetElbowAnglePunch ?? 160) {
+        feedback = "⚠️ Extend your punch fully through the target line.";
+        score = 78;
+      } else {
+        feedback = "⚡ Crisp, linear Soviet snap! Excellent execution.";
+        score = 95;
       }
     }
 
-    return feedback;
+    return {
+      feedback,
+      metricLabel: `${profile.name} Model`,
+      score
+    };
   }
 }
