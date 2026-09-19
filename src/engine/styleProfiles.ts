@@ -1,39 +1,27 @@
 export interface StyleProfile {
-  id: string;
   name: string;
-  nickname: string;
-  description: string;
-  minExtensionAngle: number;
-  guardThresholdY: number;
-  preferredStance: 'orthodox' | 'southpaw';
+  idealStanceWidthRatio: [number, number]; // min, max relative to shoulder width
+  maxTorsoLeanAngle: number; // degrees
+  requiredGuardHeight: 'high' | 'philly_shell' | 'classic_soviet';
+  allowHeadSlipBait: boolean; // True for Canelo style (leaning back to make opponents reach)
+  targetElbowAnglePunch: number;
 }
 
-export const FIGHTER_STYLES: Record<string, StyleProfile> = {
-  bivol: {
-    id: 'bivol',
-    name: 'Dmitry Bivol',
-    nickname: 'In-And-Out Master',
-    description: 'High-volume lead-hand control, rapid distance management, and full arm extension on straight punches.',
-    minExtensionAngle: 165,
-    guardThresholdY: 0.18,
-    preferredStance: 'orthodox'
+export const STYLE_PROFILES: Record<string, StyleProfile> = {
+  SOVIET_CLASSIC: {
+    name: 'Soviet Strict (Bivol/Loma)',
+    idealStanceWidthRatio: [1.3, 1.6],
+    maxTorsoLeanAngle: 10,
+    requiredGuardHeight: 'classic_soviet',
+    allowHeadSlipBait: false,
+    targetElbowAnglePunch: 165,
   },
-  ggg: {
-    id: 'ggg',
-    name: 'Gennady Golovkin',
-    nickname: 'Mexican Style',
-    description: 'Relentless forward pressure, dense high-guard defensive cover, and heavy leverage transfer.',
-    minExtensionAngle: 160,
-    guardThresholdY: 0.12,
-    preferredStance: 'orthodox'
-  },
-  loma: {
-    id: 'loma',
-    name: 'Vasiliy Lomachenko',
-    nickname: 'The Matrix',
-    description: 'Dynamic angle creation, fluid footwork shifts, and rapid multi-angle combinations.',
-    minExtensionAngle: 155,
-    guardThresholdY: 0.22,
-    preferredStance: 'southpaw'
+  MEXICAN_PRESSURE: {
+    name: 'Mexican Counter-Pressure (Canelo)',
+    idealStanceWidthRatio: [1.1, 1.4],
+    maxTorsoLeanAngle: 25, // Allows pulling back or slipping outside of range
+    requiredGuardHeight: 'high',
+    allowHeadSlipBait: true, // Rewards baiting a reach
+    targetElbowAnglePunch: 170,
   }
 };
