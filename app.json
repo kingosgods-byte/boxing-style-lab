@@ -1,0 +1,33 @@
+{
+  "expo": {
+    "name": "Brawler Labs",
+    "slug": "brawler-labs",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "dark",
+    "plugins": [
+      [
+        "react-native-vision-camera",
+        {
+          "cameraPermissionText": "Brawler Labs needs access to your camera to track your punches in real-time."
+        }
+      ]
+    ],
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "com.brawler.labs",
+      "infoPlist": {
+        "NSCameraUsageDescription": "This app uses the camera for real-time biomechanical boxing analysis."
+      }
+    },
+    "android": {
+      "package": "com.brawler.labs",
+      "permissions": [
+        "CAMERA",
+        "RECORD_AUDIO",
+        "WAKE_LOCK"
+      ]
+    }
+  }
+}
