@@ -1,10 +1,11 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Target, Activity, RotateCcw, Camera, Upload, Settings, UserCheck, TrendingUp, X, Sliders, Volume2, VolumeX, Cpu } from 'lucide-react';
+import { Target, Activity, RotateCcw, Camera, Upload, Settings, UserCheck, TrendingUp, X, Sliders, Volume2, VolumeX, Cpu, Flame } from 'lucide-react';
 import { PoseLandmarker, FilesetResolver } from '@mediapipe/tasks-vision';
 import { SovietPunchAnalyzer, PunchEvent } from './engine/punchDetector';
 import { AICoachEngine, AIAdvice } from './engine/aiCoachEngine';
 import { FIGHTER_STYLES, StyleProfile } from './engine/styleProfiles';
 import { UserDataEngine, UserStats } from './engine/userDataEngine';
+import { ComboDetector, ComboEvent } from './engine/comboDetector';
 
 type Theme = 'bivol' | 'ggg' | 'loma';
 
@@ -23,12 +24,14 @@ const THEMES: Record<Theme, ThemeConfig> = {
 export default function App() {
   const [jabs, setJabs] = useState<number>(0);
   const [crosses, setCrosses] = useState<number>(0);
+  const [combosCount, setCombosCount] = useState<number>(0);
   const [lastPunch, setLastPunch] = useState<PunchEvent | null>(null);
+  const [lastCombo, setLastCombo] = useState<ComboEvent | null>(null);
   const [aiAdvice, setAiAdvice] = useState<AIAdvice | null>(null);
   const [isCameraActive, setIsCameraActive] = useState<boolean>(false);
   const [isLoadingModel, setIsLoadingModel] = useState<boolean>(true);
 
-  // Brawler-style Settings State
+  // Settings & Preferences State
   const [selectedFighter, setSelectedFighter] = useState<string>('bivol');
   const [activeTheme, setActiveTheme] = useState<Theme>('bivol');
   const [showSettingsDrawer, setShowSettingsDrawer] = useState<boolean>(false);
@@ -39,7 +42,7 @@ export default function App() {
   const [audioFeedback, setAudioFeedback] = useState<boolean>(true);
   const [cameraQuality, setCameraQuality] = useState<'720p' | '1080p'>('720p');
 
-  // User Profile Learning Memory
+  // User Profile Memory
   const [userStats, setUserStats] = useState<UserStats>({
     totalPunches: 0,
     avgJabAngle: 150,
@@ -56,6 +59,7 @@ export default function App() {
   const analyzerRef = useRef<SovietPunchAnalyzer>(new SovietPunchAnalyzer());
   const aiCoachRef = useRef<AICoachEngine>(new AICoachEngine());
   const userDataRef = useRef<UserDataEngine>(new UserDataEngine());
+  const comboDetectorRef = useRef<ComboDetector>(new ComboDetector());
 
   const currentTheme = THEMES[activeTheme];
   const currentFighter: StyleProfile = FIGHTER_STYLES[selectedFighter] || FIGHTER_STYLES.bivol;
@@ -128,6 +132,13 @@ export default function App() {
               if (punch.type === 'jab') setJabs((prev) => prev + 1);
               if (punch.type === 'cross') setCrosses((prev) => prev + 1);
 
+              const detectedCombo = comboDetectorRef.current.processPunch(punch);
+              if (detectedCombo) {
+                setLastCombo(detectedCombo);
+                setCombosCount((prev) => prev + 1);
+                speakFeedback(`${detectedCombo.comboName}! Speed ${detectedCombo.totalTimeMs} milliseconds.`);
+              }
+
               userDataRef.current.saveSample({
                 timestamp: Date.now(),
                 type: punch.type === 'jab' ? 'jab' : 'cross',
@@ -145,7 +156,7 @@ export default function App() {
                 selectedFighter,
                 updatedStats
               );
-              if (advice) {
+              if (advice && !detectedCombo) {
                 setAiAdvice(advice);
                 speakFeedback(advice.feedback);
               }
@@ -220,8 +231,11 @@ export default function App() {
   const handleReset = () => {
     setJabs(0);
     setCrosses(0);
+    setCombosCount(0);
     setLastPunch(null);
+    setLastCombo(null);
     setAiAdvice(null);
+    comboDetectorRef.current.reset();
   };
 
   return (
@@ -317,6 +331,23 @@ export default function App() {
               LIVE TELEMETRY
             </div>
           )}
+
+          {/* Live Dynamic Combo Overlay HUD */}
+          {lastCombo && (
+            <div className="absolute bottom-4 left-4 right-4 bg-slate-950/90 backdrop-blur-md border border-amber-500/50 p-3 rounded-xl flex justify-between items-center z-20 animate-bounce">
+              <div className="flex items-center gap-2">
+                <Flame className="w-5 h-5 text-amber-400" />
+                <div>
+                  <h3 className="text-xs font-bold text-amber-400 uppercase tracking-wide">{lastCombo.comboName}</h3>
+                  <p className="text-[10px] text-slate-400">Sequence: {lastCombo.sequence.join(' ➔ ').toUpperCase()}</p>
+                </div>
+              </div>
+              <div className="text-right">
+                <span className="text-sm font-extrabold text-amber-300">{lastCombo.totalTimeMs} ms</span>
+                <p className="text-[10px] text-slate-400">{lastCombo.avgVelocity} m/s avg</p>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Dashboard Right Sidebar */}
@@ -348,20 +379,24 @@ export default function App() {
             </p>
           </div>
 
-          {/* Punch Telemetry */}
+          {/* Punch & Combo Telemetry Grid */}
           <div className="bg-slate-900/60 border border-slate-900 rounded-xl p-3.5">
             <span className="text-[10px] text-slate-500 flex items-center gap-1 mb-2.5 uppercase tracking-wider font-bold">
               <Target className="w-3.5 h-3.5 text-slate-500" /> Kinetic Session Stats
             </span>
 
-            <div className="grid grid-cols-2 gap-2.5 text-center mb-3">
-              <div className="bg-slate-950 p-3 rounded-lg border border-slate-900">
-                <span className={`text-2xl sm:text-3xl font-extrabold ${currentTheme.primary}`}>{jabs}</span>
-                <p className="text-[10px] text-slate-500 mt-0.5">LEAD JABS</p>
+            <div className="grid grid-cols-3 gap-2 text-center mb-3">
+              <div className="bg-slate-950 p-2.5 rounded-lg border border-slate-900">
+                <span className={`text-xl sm:text-2xl font-extrabold ${currentTheme.primary}`}>{jabs}</span>
+                <p className="text-[9px] text-slate-500 mt-0.5">JABS</p>
               </div>
-              <div className="bg-slate-950 p-3 rounded-lg border border-slate-900">
-                <span className="text-2xl sm:text-3xl font-extrabold text-slate-300">{crosses}</span>
-                <p className="text-[10px] text-slate-500 mt-0.5">CROSSES</p>
+              <div className="bg-slate-950 p-2.5 rounded-lg border border-slate-900">
+                <span className="text-xl sm:text-2xl font-extrabold text-slate-300">{crosses}</span>
+                <p className="text-[9px] text-slate-500 mt-0.5">CROSSES</p>
+              </div>
+              <div className="bg-slate-950 p-2.5 rounded-lg border border-slate-900">
+                <span className="text-xl sm:text-2xl font-extrabold text-amber-400">{combosCount}</span>
+                <p className="text-[9px] text-slate-500 mt-0.5">COMBOS</p>
               </div>
             </div>
 
