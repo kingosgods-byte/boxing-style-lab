@@ -1,4 +1,8 @@
-import { FilesetResolver, PoseLandmarker } from "@mediapipe/tasks-vision";
+import {
+  FilesetResolver,
+  PoseLandmarker,
+} from "@mediapipe/tasks-vision";
+
 import { Landmark } from "../types";
 
 export class MediaPipeTracker {
@@ -11,21 +15,43 @@ export class MediaPipeTracker {
       "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.22/wasm"
     );
 
-    this.pose = await PoseLandmarker.createFromOptions(vision, {
-      baseOptions: {
-        modelAssetPath:
-          "https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/1/pose_landmarker_lite.task",
-      },
-      runningMode: "VIDEO",
-      numPoses: 1,
-    });
+    this.pose = await PoseLandmarker.createFromOptions(
+      vision,
+      {
+        baseOptions: {
+          modelAssetPath:
+            "https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/1/pose_landmarker_lite.task",
+
+          delegate: "CPU",
+        },
+
+        runningMode: "VIDEO",
+
+        numPoses: 1,
+
+        minPoseDetectionConfidence: 0.4,
+
+        minPosePresenceConfidence: 0.4,
+
+        minTrackingConfidence: 0.4,
+      }
+    );
   }
 
-  detect(video: HTMLVideoElement, time: number) {
+  detect(
+    video: HTMLVideoElement,
+    timestamp: number
+  ) {
     if (!this.pose) return null;
 
-    const result = this.pose.detectForVideo(video, time);
+    const result =
+      this.pose.detectForVideo(
+        video,
+        timestamp
+      );
 
-    return result.landmarks?.[0] as Landmark[] | undefined;
+    return result.landmarks?.[0] as
+      | Landmark[]
+      | undefined;
   }
 }
