@@ -50,9 +50,7 @@ button:disabled {
   opacity: 0.55;
 }
 
-/* =========================
-   APP
-========================= */
+/* APP */
 
 .app-shell {
   width: min(1500px, 100%);
@@ -60,9 +58,7 @@ button:disabled {
   padding: 20px;
 }
 
-/* =========================
-   TOP BAR
-========================= */
+/* TOP BAR */
 
 .topbar {
   display: flex;
@@ -134,9 +130,7 @@ button:disabled {
   box-shadow: 0 0 0 3px rgba(71, 209, 108, 0.1);
 }
 
-/* =========================
-   PANELS
-========================= */
+/* PANELS */
 
 .control-panel,
 .style-panel,
@@ -163,9 +157,7 @@ button:disabled {
   margin-bottom: 18px;
 }
 
-/* =========================
-   CONTROLS
-========================= */
+/* CONTROLS */
 
 .mode-buttons {
   display: flex;
@@ -298,9 +290,7 @@ button:disabled {
   line-height: 1.45;
 }
 
-/* =========================
-   VIDEO
-========================= */
+/* VIDEO */
 
 .video-section {
   width: 100%;
@@ -355,9 +345,7 @@ button:disabled {
   font-size: 0.82rem;
 }
 
-/* =========================
-   SECTION TITLES
-========================= */
+/* SECTION TITLES */
 
 .section-title {
   display: flex;
@@ -377,9 +365,7 @@ button:disabled {
   font-size: 0.75rem;
 }
 
-/* =========================
-   STYLE TARGET
-========================= */
+/* STYLE TARGET */
 
 .style-panel {
   padding: 16px;
@@ -418,9 +404,7 @@ button:disabled {
   border-color: #b72d2d;
 }
 
-/* =========================
-   METRICS
-========================= */
+/* METRICS */
 
 .metrics-grid {
   display: grid;
@@ -493,9 +477,111 @@ button:disabled {
   letter-spacing: 0;
 }
 
-/* =========================
-   ANALYSIS
-========================= */
+/* COACHING PANEL */
+
+.coach-panel {
+  min-width: 0;
+  padding: 18px;
+}
+
+.coach-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.coach-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  height: 38px;
+  flex: 0 0 auto;
+  border: 1px solid #303947;
+  border-radius: 10px;
+  color: #d6dce5;
+  background: #111720;
+}
+
+.eyebrow {
+  color: #737e8d;
+  font-size: 0.65rem;
+  font-weight: 800;
+  letter-spacing: 0.13em;
+}
+
+.coach-header h2 {
+  margin: 3px 0 0;
+  color: #f0f3f7;
+  font-size: 1.2rem;
+  line-height: 1.1;
+  letter-spacing: -0.025em;
+}
+
+.coach-message {
+  position: relative;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 4px;
+  margin: 18px 0 0;
+  padding: 16px;
+  border: 1px solid #1b232e;
+  border-radius: 12px;
+  background: #0d1219;
+}
+
+.coach-message p {
+  min-width: 0;
+  margin: 0;
+  color: #d6dce4;
+  font-size: 0.95rem;
+  font-weight: 600;
+  line-height: 1.6;
+}
+
+.coach-quote {
+  color: #a52a2a;
+  font-size: 1.8rem;
+  font-weight: 900;
+  line-height: 0.8;
+}
+
+.coach-quote.closing {
+  align-self: end;
+}
+
+.coach-priorities {
+  margin-top: 18px;
+}
+
+.coach-priorities-title {
+  margin-bottom: 9px;
+  color: #737e8d;
+  font-size: 0.65rem;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+}
+
+.coach-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.coach-grid span {
+  min-width: 0;
+  padding: 10px 11px;
+  border: 1px solid #202936;
+  border-radius: 9px;
+  color: #aab4c1;
+  background: #0d1219;
+  font-size: 0.75rem;
+  font-weight: 700;
+  line-height: 1.35;
+}
+
+/* ANALYSIS */
 
 .analysis-grid {
   display: grid;
@@ -540,9 +626,7 @@ button:disabled {
   font-variant-numeric: tabular-nums;
 }
 
-/* =========================
-   TABLET
-========================= */
+/* TABLET */
 
 @media (max-width: 1050px) {
   .metrics-grid {
@@ -554,9 +638,7 @@ button:disabled {
   }
 }
 
-/* =========================
-   MOBILE
-========================= */
+/* MOBILE */
 
 @media (max-width: 700px) {
   .app-shell {
@@ -688,6 +770,67 @@ button:disabled {
     font-size: 1.35rem;
   }
 
+  .coach-panel {
+    padding: 13px;
+  }
+
+  .coach-header {
+    gap: 9px;
+  }
+
+  .coach-icon {
+    width: 32px;
+    height: 32px;
+    border-radius: 8px;
+  }
+
+  .coach-icon svg {
+    width: 15px;
+    height: 15px;
+  }
+
+  .eyebrow {
+    font-size: 0.56rem;
+  }
+
+  .coach-header h2 {
+    font-size: 1rem;
+  }
+
+  .coach-message {
+    gap: 3px;
+    margin-top: 13px;
+    padding: 12px;
+    border-radius: 10px;
+  }
+
+  .coach-message p {
+    font-size: 0.82rem;
+    line-height: 1.5;
+  }
+
+  .coach-quote {
+    font-size: 1.45rem;
+  }
+
+  .coach-priorities {
+    margin-top: 13px;
+  }
+
+  .coach-priorities-title {
+    margin-bottom: 7px;
+    font-size: 0.56rem;
+  }
+
+  .coach-grid {
+    gap: 6px;
+  }
+
+  .coach-grid span {
+    padding: 8px 9px;
+    font-size: 0.67rem;
+  }
+
   .analysis-grid {
     grid-template-columns: 1fr;
     gap: 10px;
@@ -714,9 +857,7 @@ button:disabled {
   }
 }
 
-/* =========================
-   VERY SMALL PHONES
-========================= */
+/* VERY SMALL PHONES */
 
 @media (max-width: 420px) {
   .app-shell {
@@ -783,14 +924,33 @@ button:disabled {
     font-size: 1.2rem;
   }
 
+  .coach-panel {
+    padding: 10px;
+  }
+
+  .coach-message {
+    padding: 10px;
+  }
+
+  .coach-message p {
+    font-size: 0.76rem;
+  }
+
+  .coach-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .coach-grid span {
+    padding: 8px;
+    font-size: 0.64rem;
+  }
+
   .style-buttons {
     grid-template-columns: 1fr 1fr;
   }
 }
 
-/* =========================
-   LANDSCAPE PHONES
-========================= */
+/* LANDSCAPE PHONES */
 
 @media (max-width: 900px) and (orientation: landscape) {
   .app-shell {
