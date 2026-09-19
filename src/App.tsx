@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Target, Activity, RotateCcw, Camera, Upload, Settings, UserCheck, TrendingUp, X, Sliders, Volume2, VolumeX, Cpu, Flame, Play, Square, Timer, Award, BarChart2 } from 'lucide-react';
+import { Target, Activity, RotateCcw, Camera, Upload, Settings, UserCheck, X, Sliders, Volume2, VolumeX, Cpu, Flame, Play, Square, Timer, Award, CloudUpload } from 'lucide-react';
 import { PoseLandmarker, FilesetResolver } from '@mediapipe/tasks-vision';
 
 import { SovietPunchAnalyzer, PunchEvent } from './engine/punchDetector';
@@ -7,6 +7,7 @@ import { AICoachEngine, AIAdvice } from './engine/aiCoachEngine';
 import { FIGHTER_STYLES, StyleProfile } from './engine/styleProfiles';
 import { UserDataEngine, UserStats } from './engine/userDataEngine';
 import { ComboDetector, ComboEvent } from './engine/comboDetector';
+import { uploadWorkoutSession } from './services/supabaseService';
 
 type Theme = 'bivol' | 'ggg' | 'loma';
 
@@ -29,6 +30,7 @@ interface SessionReport {
   combosCount: number;
   avgVelocity: number;
   formScore: number;
+  videoUrl?: string;
 }
 
 export default function App() {
@@ -41,11 +43,12 @@ export default function App() {
   const [isCameraActive, setIsCameraActive] = useState<boolean>(false);
   const [isLoadingModel, setIsLoadingModel] = useState<boolean>(true);
 
-  // Timed Workout Recording State
+  // Timed Workout Recording & Upload State
   const [isRecording, setIsRecording] = useState<boolean>(false);
   const [countdown, setCountdown] = useState<number | null>(null);
   const [recordingSeconds, setRecordingSeconds] = useState<number>(0);
   const [sessionReport, setSessionReport] = useState<SessionReport | null>(null);
+  const [isUploading, setIsUploading] = useState<boolean>(false);
 
   // Preferences & Drawer State
   const [selectedFighter, setSelectedFighter] = useState<string>('bivol');
@@ -72,13 +75,17 @@ export default function App() {
   const animFrameRef = useRef<number | null>(null);
   const timerIntervalRef = useRef<number | null>(null);
 
+  // MediaRecorder Refs
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const recordedChunksRef = useRef<Blob[]>([]);
+  const mediaStreamRef = useRef<MediaStream | null>(null);
+
   const analyzerRef = useRef<SovietPunchAnalyzer>(new SovietPunchAnalyzer());
   const aiCoachRef = useRef<AICoachEngine>(new AICoachEngine());
   const userDataRef = useRef<UserDataEngine>(new UserDataEngine());
   const comboDetectorRef = useRef<ComboDetector>(new ComboDetector());
 
   const currentTheme = THEMES[activeTheme];
-  const currentFighter: StyleProfile = FIGHTER_STYLES[selectedFighter] || FIGHTER_STYLES.bivol;
 
   useEffect(() => {
     setUserStats(userDataRef.current.getUserStats());
@@ -109,7 +116,6 @@ export default function App() {
     };
   }, []);
 
-  // Timer Tick during active recording session
   useEffect(() => {
     if (isRecording) {
       timerIntervalRef.current = window.setInterval(() => {
@@ -201,7 +207,6 @@ export default function App() {
   };
 
   const startCamera = async () => {
-    if (!videoRef.current) return;
     try {
       const constraints: MediaStreamConstraints = {
         video: {
@@ -214,9 +219,13 @@ export default function App() {
       };
 
       const stream = await navigator.mediaDevices.getUserMedia(constraints);
-      videoRef.current.srcObject = stream;
-      videoRef.current.setAttribute('playsinline', 'true');
-      await videoRef.current.play();
+      mediaStreamRef.current = stream;
+
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream;
+        videoRef.current.setAttribute('playsinline', 'true');
+        await videoRef.current.play();
+      }
       setIsCameraActive(true);
       if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
       processVideoFrame();
@@ -257,16 +266,38 @@ export default function App() {
   };
 
   const handleStartTimedSession = () => {
-    if (!isCameraActive) {
-      alert('Please start the camera first.');
+    if (!isCameraActive || !mediaStreamRef.current) {
+      alert('Please start the live camera first.');
       return;
     }
+
     setSessionReport(null);
     setCountdown(3);
+
     const countInterval = setInterval(() => {
       setCountdown((prev) => {
         if (prev === 1) {
           clearInterval(countInterval);
+          
+          // Start MediaRecorder capture
+          recordedChunksRef.current = [];
+          try {
+            const recorder = new MediaRecorder(mediaStreamRef.current!, { mimeType: 'video/webm;codecs=vp9' });
+            recorder.ondataavailable = (event) => {
+              if (event.data.size > 0) recordedChunksRef.current.push(event.data);
+            };
+            recorder.start();
+            mediaRecorderRef.current = recorder;
+          } catch (e) {
+            console.warn('VP9 codec unsupported, using default recorder settings');
+            const recorder = new MediaRecorder(mediaStreamRef.current!);
+            recorder.ondataavailable = (event) => {
+              if (event.data.size > 0) recordedChunksRef.current.push(event.data);
+            };
+            recorder.start();
+            mediaRecorderRef.current = recorder;
+          }
+
           setIsRecording(true);
           setRecordingSeconds(0);
           setJabs(0);
@@ -284,17 +315,37 @@ export default function App() {
     setIsRecording(false);
     speakFeedback('Time!');
 
-    const totalPunches = jabs + crosses;
-    const formScore = Math.min(100, Math.round(80 + totalPunches * 1.5 + combosCount * 3));
-    
-    setSessionReport({
-      durationSeconds: recordingSeconds,
-      jabsCount: jabs,
-      crossesCount: crosses,
-      combosCount: combosCount,
-      avgVelocity: userStats.avgVelocity || 4.2,
-      formScore
-    });
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+      mediaRecorderRef.current.stop();
+      mediaRecorderRef.current.onstop = async () => {
+        const videoBlob = new Blob(recordedChunksRef.current, { type: 'video/webm' });
+        
+        const totalPunches = jabs + crosses;
+        const formScore = Math.min(100, Math.round(75 + totalPunches * 1.2 + combosCount * 4));
+
+        setIsUploading(true);
+        const uploadResult = await uploadWorkoutSession(videoBlob, {
+          fighterArchetype: selectedFighter,
+          durationSeconds: recordingSeconds,
+          jabsCount: jabs,
+          crossesCount: crosses,
+          combosCount: combosCount,
+          avgVelocity: userStats.avgVelocity || 4.2,
+          formScore
+        });
+        setIsUploading(false);
+
+        setSessionReport({
+          durationSeconds: recordingSeconds,
+          jabsCount: jabs,
+          crossesCount: crosses,
+          combosCount: combosCount,
+          avgVelocity: userStats.avgVelocity || 4.2,
+          formScore,
+          videoUrl: uploadResult.success ? uploadResult.workoutRecord?.video_url : undefined
+        });
+      };
+    }
   };
 
   const handleReset = () => {
@@ -331,10 +382,10 @@ export default function App() {
                 BRAWLER LABS
               </h1>
               <span className={`text-[9px] px-2 py-0.5 rounded border font-semibold ${currentTheme.badgeBg}`}>
-                PRO
+                CLOUD PRO
               </span>
             </div>
-            <p className="text-[10px] text-slate-500">Kinetic Boxing Intelligence</p>
+            <p className="text-[10px] text-slate-500">Biomechanical Cloud Analytics</p>
           </div>
         </div>
 
@@ -393,7 +444,7 @@ export default function App() {
             <div className="text-slate-500 text-xs text-center z-10 p-5 max-w-xs space-y-3">
               <Activity className="w-10 h-10 text-slate-600 mx-auto animate-pulse" />
               <p className="leading-relaxed">
-                {isLoadingModel ? 'Initializing MediaPipe AI Engine...' : 'Tap Camera below to open view'}
+                {isLoadingModel ? 'Initializing MediaPipe AI Engine...' : 'Tap Camera below to start live feed'}
               </p>
             </div>
           )}
@@ -406,7 +457,7 @@ export default function App() {
             </div>
           )}
 
-          {/* Camera Viewport Framing Reticle Overlays */}
+          {/* Camera Viewport Framing Reticles */}
           <div className="absolute top-4 left-4 w-6 h-6 border-t-2 border-l-2 border-slate-700/60 pointer-events-none" />
           <div className="absolute top-4 right-4 w-6 h-6 border-t-2 border-r-2 border-slate-700/60 pointer-events-none" />
           <div className="absolute bottom-4 left-4 w-6 h-6 border-b-2 border-l-2 border-slate-700/60 pointer-events-none" />
@@ -463,17 +514,23 @@ export default function App() {
                 onClick={handleStopTimedSession}
                 className="w-full h-12 bg-red-600 hover:bg-red-500 text-white font-extrabold text-xs uppercase tracking-wider rounded-xl flex items-center justify-center gap-2 active:scale-95 transition-all touch-manipulation shadow-lg shadow-red-600/20"
               >
-                <Square className="w-4 h-4 fill-white" /> Finish & Generate Report
+                <Square className="w-4 h-4 fill-white" /> Finish & Sync to Cloud
               </button>
+            )}
+
+            {isUploading && (
+              <div className="flex items-center justify-center gap-2 text-xs text-amber-400 py-1 animate-pulse">
+                <CloudUpload className="w-4 h-4" /> Uploading video & telemetry to Supabase...
+              </div>
             )}
           </div>
 
-          {/* Session Workout Post-Report Modal / Drawer */}
+          {/* Session Workout Post-Report Modal */}
           {sessionReport && (
             <div className="bg-slate-900 border border-amber-500/40 rounded-2xl p-4 space-y-3 animate-fade-in">
               <div className="flex justify-between items-center border-b border-slate-800 pb-2">
                 <span className="text-xs font-bold text-amber-400 flex items-center gap-1.5 uppercase">
-                  <Award className="w-4 h-4" /> Round Workout Summary
+                  <Award className="w-4 h-4" /> Cloud Report Synced
                 </span>
                 <span className="text-xs text-slate-400">{formatTimer(sessionReport.durationSeconds)}</span>
               </div>
@@ -495,10 +552,21 @@ export default function App() {
                   <strong className="text-slate-100">{sessionReport.jabsCount + sessionReport.crossesCount}</strong>
                 </div>
                 <div className="flex justify-between">
-                  <span>Avg Extension Velocity:</span>
+                  <span>Avg Extension Speed:</span>
                   <strong className="text-slate-100">{sessionReport.avgVelocity} m/s</strong>
                 </div>
               </div>
+
+              {sessionReport.videoUrl && (
+                <a
+                  href={sessionReport.videoUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="block text-center w-full py-2.5 bg-slate-950 hover:bg-slate-800 text-cyan-400 border border-cyan-900/50 text-xs font-bold rounded-xl transition-all"
+                >
+                  View Recorded Video Asset ➔
+                </a>
+              )}
             </div>
           )}
 
@@ -525,7 +593,7 @@ export default function App() {
             </select>
           </div>
 
-          {/* Kinetic Stats */}
+          {/* Kinetic Punch Stats */}
           <div className="bg-slate-900/60 border border-slate-900 rounded-2xl p-4">
             <span className="text-[10px] text-slate-500 flex items-center gap-1.5 mb-3 uppercase tracking-wider font-bold">
               <Target className="w-4 h-4 text-slate-500" /> Live Punch Counts
@@ -599,7 +667,7 @@ export default function App() {
         </button>
       </div>
 
-      {/* App Settings Drawer */}
+      {/* Settings Drawer */}
       {showSettingsDrawer && (
         <div className="fixed inset-0 z-50 flex justify-end bg-black/75 backdrop-blur-sm transition-all">
           <div className="w-full max-w-md bg-slate-950 border-l border-slate-800 h-full p-5 flex flex-col justify-between overflow-y-auto">
@@ -679,7 +747,7 @@ export default function App() {
             </div>
 
             <div className="text-[10px] text-slate-600 text-center border-t border-slate-900 pt-4 mt-6">
-              Brawler Boxing Labs v2.0 • Timed Workout Engine
+              Brawler Boxing Labs v2.0 • Supabase Cloud Synchronized
             </div>
           </div>
         </div>
