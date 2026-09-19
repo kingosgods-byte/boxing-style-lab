@@ -31,7 +31,6 @@ async function loadFFmpeg(): Promise<FFmpeg> {
         `${baseURL}/ffmpeg-core.js`,
         "text/javascript"
       ),
-
       wasmURL: await toBlobURL(
         `${baseURL}/ffmpeg-core.wasm`,
         "application/wasm"
@@ -82,46 +81,67 @@ export async function convertVideoToCompatibleMP4(
       await fetchFile(file)
     );
 
-    await engine.exec([
-      "-i",
-      inputName,
+    const exitCode =
+      await engine.exec([
+        "-i",
+        inputName,
 
-      "-c:v",
-      "libx264",
+        "-c:v",
+        "libx264",
 
-      "-preset",
-      "ultrafast",
+        "-preset",
+        "ultrafast",
 
-      "-crf",
-      "23",
+        "-crf",
+        "23",
 
-      "-pix_fmt",
-      "yuv420p",
+        "-pix_fmt",
+        "yuv420p",
 
-      "-c:a",
-      "aac",
+        "-c:a",
+        "aac",
 
-      "-movflags",
-      "+faststart",
+        "-movflags",
+        "+faststart",
 
-      outputName,
-    ]);
+        outputName,
+      ]);
+
+    if (exitCode !== 0) {
+      throw new Error(
+        `FFmpeg conversion failed with exit code ${exitCode}.`
+      );
+    }
 
     const data =
       await engine.readFile(
         outputName
       );
 
-    const bytes =
+    const buffer =
       typeof data === "string"
         ? new TextEncoder().encode(data)
-        : data;
+        : data.buffer;
+
+    const blob = new Blob(
+      [buffer],
+      {
+        type: "video/mp4",
+      }
+    );
+
+    if (blob.size === 0) {
+      throw new Error(
+        "FFmpeg created an empty video."
+      );
+    }
 
     return new File(
-      [bytes],
+      [blob],
       outputName,
       {
         type: "video/mp4",
+        lastModified: Date.now(),
       }
     );
   } finally {
@@ -130,7 +150,7 @@ export async function convertVideoToCompatibleMP4(
         inputName
       );
     } catch {
-      // File may not exist if conversion failed.
+      // Ignore cleanup errors.
     }
 
     try {
@@ -138,7 +158,7 @@ export async function convertVideoToCompatibleMP4(
         outputName
       );
     } catch {
-      // File may not exist if conversion failed.
+      // Ignore cleanup errors.
     }
 
     engine.off(
