@@ -248,6 +248,18 @@ export function extractFeatures(
     rw.x,
 
     rw.y,
+
+    la.x,
+
+    la.y,
+
+    ra.x,
+
+    ra.y,
+
+    distance(la, ra),
+
+    distance(lk, rk),
   ];
 
   const names = [
@@ -294,6 +306,18 @@ export function extractFeatures(
     "right_wrist_x",
 
     "right_wrist_y",
+
+    "left_ankle_x",
+
+    "left_ankle_y",
+
+    "right_ankle_x",
+
+    "right_ankle_y",
+
+    "ankle_distance",
+
+    "knee_distance",
   ];
 
   return {
