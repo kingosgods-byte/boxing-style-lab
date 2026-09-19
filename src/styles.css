@@ -431,7 +431,66 @@ button:disabled {
 
 .metric-card {
   min-width: 0;
+  padding: 14px;
   border-radius: 14px;
+  transition:
+    transform 0.15s ease,
+    border-color 0.15s ease,
+    background 0.15s ease;
+}
+
+.metric-card:hover {
+  transform: translateY(-2px);
+  border-color: #293341;
+  background: #0c1118;
+}
+
+.metric-card-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.metric-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  flex: 0 0 auto;
+  border: 1px solid #252e3a;
+  border-radius: 8px;
+  color: #aeb8c6;
+  background: #10151d;
+}
+
+.metric-title {
+  min-width: 0;
+  overflow: hidden;
+  color: #788391;
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.metric-value {
+  margin-top: 10px;
+  color: #f0f3f7;
+  font-size: clamp(1.35rem, 2vw, 1.75rem);
+  font-weight: 800;
+  line-height: 1;
+  letter-spacing: -0.04em;
+  font-variant-numeric: tabular-nums;
+}
+
+.metric-value small {
+  margin-left: 3px;
+  color: #737e8c;
+  font-size: 0.62em;
+  font-weight: 650;
+  letter-spacing: 0;
 }
 
 /* =========================
@@ -440,7 +499,9 @@ button:disabled {
 
 .analysis-grid {
   display: grid;
-  grid-template-columns: minmax(0, 1.35fr) minmax(300px, 0.65fr);
+  grid-template-columns:
+    minmax(0, 1.35fr)
+    minmax(300px, 0.65fr);
   gap: 14px;
   align-items: stretch;
 }
@@ -607,6 +668,26 @@ button:disabled {
     margin-bottom: 12px;
   }
 
+  .metric-card {
+    padding: 11px;
+    border-radius: 11px;
+  }
+
+  .metric-icon {
+    width: 27px;
+    height: 27px;
+    border-radius: 7px;
+  }
+
+  .metric-title {
+    font-size: 0.65rem;
+  }
+
+  .metric-value {
+    margin-top: 8px;
+    font-size: 1.35rem;
+  }
+
   .analysis-grid {
     grid-template-columns: 1fr;
     gap: 10px;
@@ -683,6 +764,23 @@ button:disabled {
   .danger-button {
     min-height: 43px;
     font-size: 0.72rem;
+  }
+
+  .metric-card {
+    padding: 9px;
+  }
+
+  .metric-icon {
+    width: 25px;
+    height: 25px;
+  }
+
+  .metric-title {
+    font-size: 0.6rem;
+  }
+
+  .metric-value {
+    font-size: 1.2rem;
   }
 
   .style-buttons {
