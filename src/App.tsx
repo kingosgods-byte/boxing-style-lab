@@ -4,7 +4,7 @@ import { PoseLandmarker, FilesetResolver } from '@mediapipe/tasks-vision';
 
 import { SovietPunchAnalyzer, PunchEvent } from './engine/punchDetector';
 import { AICoachEngine, AIAdvice } from './engine/aiCoachEngine';
-import { FIGHTER_STYLES, StyleProfile } from './engine/styleProfiles';
+import { FIGHTER_STYLES } from './engine/styleProfiles';
 import { UserDataEngine, UserStats } from './engine/userDataEngine';
 import { ComboDetector, ComboEvent } from './engine/comboDetector';
 import { uploadWorkoutSession } from './services/supabaseService';
@@ -213,7 +213,7 @@ export default function App() {
           facingMode: 'user',
           width: { ideal: 1280 },
           height: { ideal: 720 },
-          frameRate: { ideal: 60 }
+          frameRate: { ideal: 30 }
         },
         audio: false
       };
@@ -224,13 +224,14 @@ export default function App() {
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
         videoRef.current.setAttribute('playsinline', 'true');
+        videoRef.current.muted = true;
         await videoRef.current.play();
       }
       setIsCameraActive(true);
       if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
       processVideoFrame();
     } catch (err) {
-      alert('Camera access failed. Please allow camera permissions.');
+      alert('Camera access failed. Please ensure camera permissions are allowed in Safari/iOS settings.');
     }
   };
 
@@ -241,10 +242,16 @@ export default function App() {
       videoRef.current.srcObject = null;
       videoRef.current.src = url;
       videoRef.current.setAttribute('playsinline', 'true');
-      videoRef.current.play();
-      setIsCameraActive(true);
-      if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
-      processVideoFrame();
+      videoRef.current.muted = true;
+      
+      videoRef.current.play().then(() => {
+        setIsCameraActive(true);
+        if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
+        processVideoFrame();
+      }).catch((err) => {
+        console.error("Autoplay prevented on iOS:", err);
+        alert("Please tap play or interact with the screen to start video analysis.");
+      });
     }
   };
 
@@ -281,7 +288,8 @@ export default function App() {
           
           recordedChunksRef.current = [];
           try {
-            const recorder = new MediaRecorder(mediaStreamRef.current!, { mimeType: 'video/webm;codecs=vp9' });
+            const mime = MediaRecorder.isTypeSupported('video/mp4') ? 'video/mp4' : 'video/webm';
+            const recorder = new MediaRecorder(mediaStreamRef.current!, { mimeType: mime });
             recorder.ondataavailable = (event) => {
               if (event.data.size > 0) recordedChunksRef.current.push(event.data);
             };
@@ -316,7 +324,8 @@ export default function App() {
     if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
       mediaRecorderRef.current.stop();
       mediaRecorderRef.current.onstop = async () => {
-        const videoBlob = new Blob(recordedChunksRef.current, { type: 'video/webm' });
+        const mime = MediaRecorder.isTypeSupported('video/mp4') ? 'video/mp4' : 'video/webm';
+        const videoBlob = new Blob(recordedChunksRef.current, { type: mime });
         
         const totalPunches = jabs + crosses;
         const formScore = Math.min(100, Math.round(75 + totalPunches * 1.2 + combosCount * 4));
@@ -380,7 +389,7 @@ export default function App() {
                 BRAWLER LABS
               </h1>
               <span className={`text-[9px] px-2 py-0.5 rounded border font-semibold ${currentTheme.badgeBg}`}>
-                CLOUD PRO
+                iOS READY
               </span>
             </div>
             <p className="text-[10px] text-slate-500">Biomechanical Cloud Analytics</p>
@@ -423,12 +432,13 @@ export default function App() {
       {/* Main Grid View */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-3 sm:gap-5">
         
-        {/* Real Camera Viewport */}
+        {/* Real Camera / Video Viewport */}
         <div className="lg:col-span-2 relative bg-black rounded-2xl border border-slate-900 overflow-hidden w-full h-[55vh] sm:h-[65vh] flex items-center justify-center shadow-2xl">
           <video
             ref={videoRef}
             playsInline
             muted
+            autoPlay
             className={`w-full h-full object-contain ${mirrorVideo ? 'scale-x-[-1]' : ''}`}
           />
           <canvas
@@ -442,7 +452,7 @@ export default function App() {
             <div className="text-slate-500 text-xs text-center z-10 p-5 max-w-xs space-y-3">
               <Activity className="w-10 h-10 text-slate-600 mx-auto animate-pulse" />
               <p className="leading-relaxed">
-                {isLoadingModel ? 'Initializing MediaPipe AI Engine...' : 'Tap Camera below to start live feed'}
+                {isLoadingModel ? 'Initializing MediaPipe AI Engine...' : 'Tap Camera or Upload below to start'}
               </p>
             </div>
           )}
@@ -454,12 +464,6 @@ export default function App() {
               <p className="text-xs text-slate-400 mt-4 uppercase tracking-widest font-bold">Get In Stance</p>
             </div>
           )}
-
-          {/* Camera Viewport Framing Reticles */}
-          <div className="absolute top-4 left-4 w-6 h-6 border-t-2 border-l-2 border-slate-700/60 pointer-events-none" />
-          <div className="absolute top-4 right-4 w-6 h-6 border-t-2 border-r-2 border-slate-700/60 pointer-events-none" />
-          <div className="absolute bottom-4 left-4 w-6 h-6 border-b-2 border-l-2 border-slate-700/60 pointer-events-none" />
-          <div className="absolute bottom-4 right-4 w-6 h-6 border-b-2 border-r-2 border-slate-700/60 pointer-events-none" />
 
           {/* Live Recording Header Badge */}
           {isRecording && (
@@ -544,17 +548,6 @@ export default function App() {
                 </div>
               </div>
 
-              <div className="text-[11px] text-slate-300 space-y-1 bg-slate-950 p-3 rounded-xl border border-slate-800">
-                <div className="flex justify-between">
-                  <span>Punches Thrown:</span>
-                  <strong className="text-slate-100">{sessionReport.jabsCount + sessionReport.crossesCount}</strong>
-                </div>
-                <div className="flex justify-between">
-                  <span>Avg Extension Speed:</span>
-                  <strong className="text-slate-100">{sessionReport.avgVelocity} m/s</strong>
-                </div>
-              </div>
-
               {sessionReport.videoUrl && (
                 <a
                   href={sessionReport.videoUrl}
@@ -612,23 +605,6 @@ export default function App() {
               </div>
             </div>
           </div>
-
-          {/* AI Diagnostic Alert */}
-          {aiAdvice && (
-            <div className={`p-4 rounded-2xl border transition-all ${
-              aiAdvice.severity === 'critical'
-                ? 'bg-red-950/30 border-red-900/50 text-red-300'
-                : aiAdvice.severity === 'warning'
-                ? 'bg-amber-950/30 border-amber-900/50 text-amber-300'
-                : 'bg-emerald-950/30 border-emerald-900/50 text-emerald-300'
-            }`}>
-              <div className="flex justify-between items-center mb-1">
-                <span className="text-[10px] font-bold uppercase tracking-wider">{aiAdvice.metricName}</span>
-                <span className="font-mono font-bold text-xs">{aiAdvice.score}% Match</span>
-              </div>
-              <p className="text-xs leading-relaxed opacity-90">{aiAdvice.feedback}</p>
-            </div>
-          )}
         </div>
       </div>
 
@@ -665,7 +641,7 @@ export default function App() {
         </button>
       </div>
 
-      {/* Settings Drawer */}
+      {/* Settings Drawer Overlay */}
       {showSettingsDrawer && (
         <div className="fixed inset-0 z-50 flex justify-end bg-black/75 backdrop-blur-sm transition-all">
           <div className="w-full max-w-md bg-slate-950 border-l border-slate-800 h-full p-5 flex flex-col justify-between overflow-y-auto">
@@ -692,7 +668,7 @@ export default function App() {
                     <button
                       key={t}
                       onClick={() => setActiveTheme(t)}
-                      className={`h-11 rounded-xl border text-xs capitalize font-bold ${
+                      className={`h-11 rounded-xl border text-xs capitalize font-bold touch-manipulation ${
                         activeTheme === t
                           ? 'bg-slate-900 border-slate-700 text-slate-100'
                           : 'bg-slate-950 border-slate-900 text-slate-500'
@@ -745,7 +721,7 @@ export default function App() {
             </div>
 
             <div className="text-[10px] text-slate-600 text-center border-t border-slate-900 pt-4 mt-6">
-              Brawler Boxing Labs v2.0 • Supabase Cloud Synchronized
+              Brawler Boxing Labs v2.0 • iOS Optimized
             </div>
           </div>
         </div>
