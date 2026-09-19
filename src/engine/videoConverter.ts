@@ -5,27 +5,33 @@ import {
 } from "@ffmpeg/util";
 
 let ffmpeg: FFmpeg | null = null;
-let loadingPromise: Promise<void> | null = null;
+let loadingPromise: Promise<FFmpeg> | null = null;
 
-async function loadFFmpeg() {
-  if (ffmpeg) return ffmpeg;
-
-  if (loadingPromise) {
-    await loadingPromise;
-    return ffmpeg!;
+async function loadFFmpeg(): Promise<FFmpeg> {
+  if (ffmpeg) {
+    return ffmpeg;
   }
 
-  const instance = new FFmpeg();
+  if (loadingPromise) {
+    return loadingPromise;
+  }
 
   loadingPromise = (async () => {
+    const instance = new FFmpeg();
+
     const baseURL =
-      "https://unpkg.com/@ffmpeg/core@0.12.10/dist/umd";
+      "https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.12.10/dist/esm";
+
+    instance.on("log", ({ message }) => {
+      console.log("[FFmpeg]", message);
+    });
 
     await instance.load({
       coreURL: await toBlobURL(
         `${baseURL}/ffmpeg-core.js`,
         "text/javascript"
       ),
+
       wasmURL: await toBlobURL(
         `${baseURL}/ffmpeg-core.wasm`,
         "application/wasm"
@@ -33,11 +39,11 @@ async function loadFFmpeg() {
     });
 
     ffmpeg = instance;
+
+    return instance;
   })();
 
-  await loadingPromise;
-
-  return ffmpeg!;
+  return loadingPromise;
 }
 
 export async function convertVideoToCompatibleMP4(
@@ -46,64 +52,98 @@ export async function convertVideoToCompatibleMP4(
 ): Promise<File> {
   const engine = await loadFFmpeg();
 
-  const inputName = `input_${Date.now()}_${file.name
-    .replace(/[^a-zA-Z0-9._-]/g, "_")}`;
+  const inputName =
+    `input_${Date.now()}.mov`;
 
-  const outputName = `boxing_compatible_${Date.now()}.mp4`;
+  const outputName =
+    `boxing_compatible_${Date.now()}.mp4`;
 
-  engine.on("progress", ({ progress }) => {
+  const progressHandler = ({
+    progress,
+  }: {
+    progress: number;
+  }) => {
     onProgress?.(
-      Math.max(0, Math.min(1, progress))
+      Math.max(
+        0,
+        Math.min(1, progress)
+      )
     );
-  });
+  };
 
-  await engine.writeFile(
-    inputName,
-    await fetchFile(file)
+  engine.on(
+    "progress",
+    progressHandler
   );
 
-  await engine.exec([
-    "-i",
-    inputName,
+  try {
+    await engine.writeFile(
+      inputName,
+      await fetchFile(file)
+    );
 
-    "-c:v",
-    "libx264",
+    await engine.exec([
+      "-i",
+      inputName,
 
-    "-preset",
-    "ultrafast",
+      "-c:v",
+      "libx264",
 
-    "-crf",
-    "23",
+      "-preset",
+      "ultrafast",
 
-    "-pix_fmt",
-    "yuv420p",
+      "-crf",
+      "23",
 
-    "-c:a",
-    "aac",
+      "-pix_fmt",
+      "yuv420p",
 
-    "-movflags",
-    "+faststart",
+      "-c:a",
+      "aac",
 
-    outputName,
-  ]);
+      "-movflags",
+      "+faststart",
 
-  const data = await engine.readFile(
-    outputName
-  );
+      outputName,
+    ]);
 
-  await engine.deleteFile(inputName);
-  await engine.deleteFile(outputName);
+    const data =
+      await engine.readFile(
+        outputName
+      );
 
-  const bytes =
-    typeof data === "string"
-      ? new TextEncoder().encode(data)
-      : data;
+    const bytes =
+      typeof data === "string"
+        ? new TextEncoder().encode(data)
+        : data;
 
-  return new File(
-    [bytes],
-    outputName,
-    {
-      type: "video/mp4",
+    return new File(
+      [bytes],
+      outputName,
+      {
+        type: "video/mp4",
+      }
+    );
+  } finally {
+    try {
+      await engine.deleteFile(
+        inputName
+      );
+    } catch {
+      // File may not exist if conversion failed.
     }
-  );
+
+    try {
+      await engine.deleteFile(
+        outputName
+      );
+    } catch {
+      // File may not exist if conversion failed.
+    }
+
+    engine.off(
+      "progress",
+      progressHandler
+    );
+  }
 }
