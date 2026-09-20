@@ -51,7 +51,7 @@ export default function App() {
   const [isUploading, setIsUploading] = useState<boolean>(false);
 
   // Preferences & Drawer State
-  const [selectedFighter, setSelectedFighter] = useState<string>('bivol');
+  const [selectedFighter, setSelectedFighter] = useState<string>('SOVIET_CLASSIC');
   const [activeTheme, setActiveTheme] = useState<Theme>('bivol');
   const [showSettingsDrawer, setShowSettingsDrawer] = useState<boolean>(false);
   
@@ -196,9 +196,8 @@ export default function App() {
     window.speechSynthesis.speak(utterance);
   };
 
-  // Smooth landmarks using Exponential Moving Average (EMA) to eliminate jitter
   const smoothLandmarks = (rawLandmarks: any[]) => {
-    const alpha = 0.4; // Smoothing factor (higher = smoother, lower = more responsive)
+    const alpha = 0.4;
     if (!prevLandmarksRef.current) {
       prevLandmarksRef.current = rawLandmarks;
       return rawLandmarks;
@@ -248,7 +247,7 @@ export default function App() {
               drawSkeleton(ctx, landmarks, canvas.width, canvas.height);
             }
 
-            const punch = analyzerRef.current.processFrame(landmarks, performance.now());
+            const punch = analyzerRef.current.update(landmarks);
             if (punch) {
               setLastPunch(punch);
               playPunchSfx();
@@ -256,11 +255,11 @@ export default function App() {
               if (punch.type === 'jab') setJabs((prev) => prev + 1);
               if (punch.type === 'cross') setCrosses((prev) => prev + 1);
 
-              const detectedCombo = comboDetectorRef.current.processPunch(punch);
+              const detectedCombo = comboDetectorRef.current.registerPunch(punch.type);
               if (detectedCombo) {
                 setLastCombo(detectedCombo);
                 setCombosCount((prev) => prev + 1);
-                speakFeedback(`${detectedCombo.comboName}!`);
+                speakFeedback(`${detectedCombo.name}!`);
               }
 
               userDataRef.current.saveSample({
@@ -475,24 +474,23 @@ export default function App() {
   };
 
   return (
-    <div className="bg-slate-950 text-slate-300 min-h-screen p-3 sm:p-5 font-mono relative pb-28 sm:pb-5 selection:bg-slate-800">
+    <div className="bg-slate-950 text-slate-300 w-full h-screen flex flex-col font-mono relative overflow-hidden selection:bg-slate-800">
       
-      {/* Top Navigation */}
-      <header className="flex justify-between items-center border-b border-slate-900 pb-3 mb-3 sm:mb-5">
+      {/* Top Navigation Bar */}
+      <header className="flex justify-between items-center px-4 py-3 bg-slate-900 border-b border-slate-800 shrink-0 z-20">
         <div className="flex items-center gap-2.5">
-          <div className="p-2 bg-slate-900 rounded-xl border border-slate-800">
-            <Cpu className={`w-5 h-5 ${currentTheme.primary}`} />
+          <div className="p-1.5 bg-slate-950 rounded-xl border border-slate-800">
+            <Cpu className={`w-4 h-4 ${currentTheme.primary}`} />
           </div>
           <div>
             <div className="flex items-center gap-2">
-              <h1 className={`text-base sm:text-lg font-bold tracking-wider uppercase ${currentTheme.primary}`}>
+              <h1 className={`text-sm sm:text-base font-bold tracking-wider uppercase ${currentTheme.primary}`}>
                 BRAWLER LABS
               </h1>
               <span className={`text-[9px] px-2 py-0.5 rounded border font-semibold ${currentTheme.badgeBg}`}>
-                SMOOTH PWA
+                2026 PRO
               </span>
             </div>
-            <p className="text-[10px] text-slate-500">Biomechanical Cloud Analytics</p>
           </div>
         </div>
 
@@ -501,71 +499,77 @@ export default function App() {
           <button
             onClick={startCamera}
             disabled={isLoadingModel}
-            className="flex items-center gap-1.5 px-3.5 py-2.5 bg-slate-900 hover:bg-slate-800 active:scale-95 text-slate-200 border border-slate-800 text-xs font-semibold rounded-xl transition-all touch-manipulation"
+            className="flex items-center gap-1.5 px-3 py-2 bg-slate-950 hover:bg-slate-800 active:scale-95 text-slate-200 border border-slate-800 text-xs font-semibold rounded-xl transition-all touch-manipulation"
           >
-            <Camera className="w-4 h-4 text-slate-400" />
+            <Camera className="w-3.5 h-3.5 text-slate-400" />
             <span>Camera</span>
           </button>
 
-          <label className="flex items-center gap-1.5 px-3.5 py-2.5 bg-slate-900 hover:bg-slate-800 active:scale-95 text-slate-200 border border-slate-800 text-xs font-semibold rounded-xl cursor-pointer transition-all touch-manipulation">
-            <Upload className="w-4 h-4 text-slate-400" />
+          <label className="flex items-center gap-1.5 px-3 py-2 bg-slate-950 hover:bg-slate-800 active:scale-95 text-slate-200 border border-slate-800 text-xs font-semibold rounded-xl cursor-pointer transition-all touch-manipulation">
+            <Upload className="w-3.5 h-3.5 text-slate-400" />
             <span>Upload</span>
             <input type="file" accept="video/*" onChange={handleVideoUpload} className="hidden" />
           </label>
 
           <button
             onClick={() => setShowSettingsDrawer(true)}
-            className="p-2.5 bg-slate-900 hover:bg-slate-800 active:scale-95 text-slate-300 border border-slate-800 rounded-xl transition-all touch-manipulation"
+            className="p-2 bg-slate-950 hover:bg-slate-800 active:scale-95 text-slate-300 border border-slate-800 rounded-xl transition-all touch-manipulation"
           >
-            <Settings className="w-4.5 h-4.5" />
+            <Settings className="w-4 h-4" />
           </button>
 
           <button
             onClick={handleReset}
-            className="p-2.5 bg-slate-900 hover:bg-slate-800 active:scale-95 text-slate-400 border border-slate-800 rounded-xl transition-all touch-manipulation"
+            className="p-2 bg-slate-950 hover:bg-slate-800 active:scale-95 text-slate-400 border border-slate-800 rounded-xl transition-all touch-manipulation"
           >
-            <RotateCcw className="w-4.5 h-4.5" />
+            <RotateCcw className="w-4 h-4" />
           </button>
         </div>
       </header>
 
-      {/* Main Grid View */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-3 sm:gap-5">
+      {/* Main Split Viewport */}
+      <div className="flex-1 grid grid-cols-1 lg:grid-cols-3 overflow-hidden">
         
-        {/* Real Camera / Video Viewport */}
-        <div className="lg:col-span-2 relative bg-black rounded-2xl border border-slate-900 overflow-hidden w-full h-[55vh] sm:h-[65vh] flex items-center justify-center shadow-2xl">
+        {/* Real Camera / Video Viewport Container */}
+        <div className="lg:col-span-2 relative bg-black w-full h-full flex items-center justify-center overflow-hidden">
           <video
             ref={videoRef}
             playsInline
             muted
             autoPlay
-            className={`absolute inset-0 w-full h-full object-contain ${mirrorVideo ? 'scale-x-[-1]' : ''}`}
+            className={`absolute inset-0 w-full h-full object-cover ${mirrorVideo ? 'scale-x-[-1]' : ''}`}
           />
           <canvas
             ref={canvasRef}
-            className={`absolute inset-0 w-full h-full object-contain pointer-events-none ${
+            className={`absolute inset-0 w-full h-full object-cover pointer-events-none ${
               mirrorVideo ? 'scale-x-[-1]' : ''
             }`}
           />
 
           {!isCameraActive && (
-            <div className="text-slate-500 text-xs text-center z-10 p-5 max-w-xs space-y-3">
-              <Activity className="w-10 h-10 text-slate-600 mx-auto animate-pulse" />
+            <div className="absolute text-slate-400 text-xs text-center z-10 p-5 max-w-xs space-y-3 bg-slate-900/90 border border-slate-800 rounded-2xl backdrop-blur-md shadow-2xl">
+              <Activity className="w-10 h-10 text-cyan-400 mx-auto animate-pulse" />
               <p className="leading-relaxed">
-                {isLoadingModel ? 'Initializing MediaPipe AI Engine...' : 'Tap Camera or Upload below to start'}
+                {isLoadingModel ? 'Initializing MediaPipe AI Engine...' : 'Tap Camera or Upload to begin biomechanics analysis'}
               </p>
+              <button
+                onClick={startCamera}
+                className="w-full py-2.5 bg-cyan-600 hover:bg-cyan-500 text-slate-950 font-bold uppercase tracking-wider rounded-xl transition-all"
+              >
+                Start Camera
+              </button>
             </div>
           )}
 
           {/* Countdown Overlay */}
           {countdown !== null && (
-            <div className="absolute inset-0 bg-black/80 backdrop-blur-md flex flex-col items-center justify-center z-30">
-              <span className="text-7xl font-extrabold text-amber-400 animate-ping">{countdown}</span>
+            <div className="absolute inset-0 bg-black/85 backdrop-blur-md flex flex-col items-center justify-center z-30">
+              <span className="text-8xl font-extrabold text-amber-400 animate-ping">{countdown}</span>
               <p className="text-xs text-slate-400 mt-4 uppercase tracking-widest font-bold">Get In Stance</p>
             </div>
           )}
 
-          {/* Live Recording Header Badge */}
+          {/* Live Recording Badge */}
           {isRecording && (
             <div className="absolute top-3 left-3 bg-red-950/90 border border-red-800 text-red-400 px-3 py-1.5 rounded-full text-xs font-bold flex items-center gap-2 z-20 backdrop-blur-md">
               <span className="w-2.5 h-2.5 rounded-full bg-red-500 animate-ping" />
@@ -575,169 +579,180 @@ export default function App() {
 
           {/* Combo HUD Banner */}
           {lastCombo && (
-            <div className="absolute bottom-3 left-3 right-3 bg-slate-950/90 backdrop-blur-md border border-amber-500/50 p-3 rounded-xl flex justify-between items-center z-20">
+            <div className="absolute bottom-3 left-3 right-3 sm:left-auto sm:right-3 bg-slate-950/90 backdrop-blur-md border border-amber-500/50 p-3 rounded-xl flex justify-between items-center z-20 gap-4">
               <div className="flex items-center gap-2.5">
-                <Flame className="w-6 h-6 text-amber-400 shrink-0" />
+                <Flame className="w-5 h-5 text-amber-400 shrink-0" />
                 <div>
-                  <h3 className="text-xs font-bold text-amber-400 uppercase tracking-wide">{lastCombo.comboName}</h3>
-                  <p className="text-[10px] text-slate-400">Sequence: {lastCombo.sequence.join(' ➔ ').toUpperCase()}</p>
+                  <h3 className="text-xs font-bold text-amber-400 uppercase tracking-wide">{lastCombo.name}</h3>
+                  <p className="text-[10px] text-slate-400">Combo sequence completed</p>
                 </div>
-              </div>
-              <div className="text-right">
-                <span className="text-sm font-extrabold text-amber-300">{lastCombo.totalTimeMs} ms</span>
               </div>
             </div>
           )}
         </div>
 
-        {/* Dashboard Sidebar & Analytics */}
-        <div className="space-y-3">
-          
-          {/* Timed Recording Control Panel */}
-          <div className="bg-slate-900/80 border border-slate-800 rounded-2xl p-4 space-y-3">
-            <div className="flex justify-between items-center">
-              <span className="text-[10px] text-slate-400 flex items-center gap-1.5 uppercase tracking-wider font-bold">
-                <Timer className="w-4 h-4 text-amber-400" /> Round Timer
-              </span>
-              <span className="text-lg font-extrabold text-slate-100 font-mono">
-                {formatTimer(recordingSeconds)}
-              </span>
-            </div>
-
-            {!isRecording ? (
-              <button
-                onClick={handleStartTimedSession}
-                className="w-full h-12 bg-amber-500 hover:bg-amber-400 text-slate-950 font-extrabold text-xs uppercase tracking-wider rounded-xl flex items-center justify-center gap-2 active:scale-95 transition-all touch-manipulation shadow-lg shadow-amber-500/10"
-              >
-                <Play className="w-4 h-4 fill-slate-950" /> Start Timed Workout
-              </button>
-            ) : (
-              <button
-                onClick={handleStopTimedSession}
-                className="w-full h-12 bg-red-600 hover:bg-red-500 text-white font-extrabold text-xs uppercase tracking-wider rounded-xl flex items-center justify-center gap-2 active:scale-95 transition-all touch-manipulation shadow-lg shadow-red-600/20"
-              >
-                <Square className="w-4 h-4 fill-white" /> Finish & Sync to Cloud
-              </button>
-            )}
-
-            {isUploading && (
-              <div className="flex items-center justify-center gap-2 text-xs text-amber-400 py-1 animate-pulse">
-                <Cloud className="w-4 h-4" /> Uploading video & telemetry to Supabase...
-              </div>
-            )}
-          </div>
-
-          {/* Session Workout Post-Report Modal */}
-          {sessionReport && (
-            <div className="bg-slate-900 border border-amber-500/40 rounded-2xl p-4 space-y-3 animate-fade-in">
-              <div className="flex justify-between items-center border-b border-slate-800 pb-2">
-                <span className="text-xs font-bold text-amber-400 flex items-center gap-1.5 uppercase">
-                  <Award className="w-4 h-4" /> Cloud Report Synced
+        {/* Dashboard Sidebar & Controls */}
+        <div className="bg-slate-900/90 border-l border-slate-800 p-4 space-y-3 overflow-y-auto shrink-0 flex flex-col justify-between">
+          <div className="space-y-3">
+            
+            {/* Timed Recording Control Panel */}
+            <div className="bg-slate-950/80 border border-slate-800 rounded-2xl p-3.5 space-y-2.5">
+              <div className="flex justify-between items-center">
+                <span className="text-[10px] text-slate-400 flex items-center gap-1.5 uppercase tracking-wider font-bold">
+                  <Timer className="w-3.5 h-3.5 text-amber-400" /> Round Timer
                 </span>
-                <span className="text-xs text-slate-400">{formatTimer(sessionReport.durationSeconds)}</span>
+                <span className="text-base font-extrabold text-slate-100 font-mono">
+                  {formatTimer(recordingSeconds)}
+                </span>
               </div>
 
-              <div className="grid grid-cols-2 gap-2 text-center">
-                <div className="bg-slate-950 p-2.5 rounded-xl border border-slate-800">
-                  <p className="text-[10px] text-slate-500">FORM SCORE</p>
-                  <p className="text-xl font-black text-emerald-400">{sessionReport.formScore}/100</p>
-                </div>
-                <div className="bg-slate-950 p-2.5 rounded-xl border border-slate-800">
-                  <p className="text-[10px] text-slate-500">TOTAL COMBOS</p>
-                  <p className="text-xl font-black text-amber-400">{sessionReport.combosCount}</p>
-                </div>
-              </div>
-
-              {sessionReport.videoUrl && (
-                <a
-                  href={sessionReport.videoUrl}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="block text-center w-full py-2.5 bg-slate-950 hover:bg-slate-800 text-cyan-400 border border-cyan-900/50 text-xs font-bold rounded-xl transition-all"
+              {!isRecording ? (
+                <button
+                  onClick={handleStartTimedSession}
+                  className="w-full h-11 bg-amber-500 hover:bg-amber-400 text-slate-950 font-extrabold text-xs uppercase tracking-wider rounded-xl flex items-center justify-center gap-2 active:scale-95 transition-all touch-manipulation shadow-lg shadow-amber-500/10"
                 >
-                  View Recorded Video Asset ➔
-                </a>
+                  <Play className="w-3.5 h-3.5 fill-slate-950" /> Start Timed Workout
+                </button>
+              ) : (
+                <button
+                  onClick={handleStopTimedSession}
+                  className="w-full h-11 bg-red-600 hover:bg-red-500 text-white font-extrabold text-xs uppercase tracking-wider rounded-xl flex items-center justify-center gap-2 active:scale-95 transition-all touch-manipulation shadow-lg shadow-red-600/20"
+                >
+                  <Square className="w-3.5 h-3.5 fill-white" /> Finish & Sync to Cloud
+                </button>
+              )}
+
+              {isUploading && (
+                <div className="flex items-center justify-center gap-2 text-[11px] text-amber-400 py-1 animate-pulse">
+                  <Cloud className="w-3.5 h-3.5" /> Syncing session data...
+                </div>
               )}
             </div>
-          )}
 
-          {/* Target Fighter Archetype */}
-          <div className="bg-slate-900/60 border border-slate-900 rounded-2xl p-4 space-y-2">
-            <label className="text-[10px] text-slate-500 flex items-center gap-1.5 uppercase tracking-wider font-bold">
-              <UserCheck className="w-4 h-4 text-slate-400" /> Target Fighter Archetype
-            </label>
-            <select
-              value={selectedFighter}
-              onChange={(e) => {
-                setSelectedFighter(e.target.value);
-                if (e.target.value === 'ggg') setActiveTheme('ggg');
-                else if (e.target.value === 'loma') setActiveTheme('loma');
-                else setActiveTheme('bivol');
-              }}
-              className="w-full bg-slate-950 border border-slate-800 text-slate-200 text-xs rounded-xl p-3 focus:outline-none focus:border-slate-700 h-12 touch-manipulation"
-            >
-              {Object.values(FIGHTER_STYLES).map((f) => (
-                <option key={f.id} value={f.id}>
-                  {f.name} ({f.nickname})
-                </option>
-              ))}
-            </select>
-          </div>
+            {/* Session Post-Report Modal */}
+            {sessionReport && (
+              <div className="bg-slate-950 border border-amber-500/40 rounded-2xl p-3.5 space-y-2.5 animate-fade-in">
+                <div className="flex justify-between items-center border-b border-slate-800 pb-2">
+                  <span className="text-xs font-bold text-amber-400 flex items-center gap-1.5 uppercase">
+                    <Award className="w-3.5 h-3.5" /> Report Synced
+                  </span>
+                  <span className="text-xs text-slate-400">{formatTimer(sessionReport.durationSeconds)}</span>
+                </div>
 
-          {/* Kinetic Punch Stats */}
-          <div className="bg-slate-900/60 border border-slate-900 rounded-2xl p-4">
-            <span className="text-[10px] text-slate-500 flex items-center gap-1.5 mb-3 uppercase tracking-wider font-bold">
-              <Target className="w-4 h-4 text-slate-500" /> Live Punch Counts
-            </span>
+                <div className="grid grid-cols-2 gap-2 text-center">
+                  <div className="bg-slate-900 p-2 rounded-xl border border-slate-800">
+                    <p className="text-[9px] text-slate-500">FORM SCORE</p>
+                    <p className="text-lg font-black text-emerald-400">{sessionReport.formScore}/100</p>
+                  </div>
+                  <div className="bg-slate-900 p-2 rounded-xl border border-slate-800">
+                    <p className="text-[9px] text-slate-500">COMBOS</p>
+                    <p className="text-lg font-black text-amber-400">{sessionReport.combosCount}</p>
+                  </div>
+                </div>
 
-            <div className="grid grid-cols-3 gap-2 text-center">
-              <div className="bg-slate-950 p-3 rounded-xl border border-slate-900">
-                <span className={`text-2xl font-extrabold ${currentTheme.primary}`}>{jabs}</span>
-                <p className="text-[10px] text-slate-500 mt-1 font-bold">JABS</p>
+                {sessionReport.videoUrl && (
+                  <a
+                    href={sessionReport.videoUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="block text-center w-full py-2 bg-slate-900 hover:bg-slate-800 text-cyan-400 border border-cyan-900/50 text-xs font-bold rounded-xl transition-all"
+                  >
+                    View Cloud Recording ➔
+                  </a>
+                )}
               </div>
-              <div className="bg-slate-950 p-3 rounded-xl border border-slate-900">
-                <span className="text-2xl font-extrabold text-slate-300">{crosses}</span>
-                <p className="text-[10px] text-slate-500 mt-1 font-bold">CROSSES</p>
-              </div>
-              <div className="bg-slate-950 p-3 rounded-xl border border-slate-900">
-                <span className="text-2xl font-extrabold text-amber-400">{combosCount}</span>
-                <p className="text-[10px] text-slate-500 mt-1 font-bold">COMBOS</p>
+            )}
+
+            {/* Target Fighter Archetype Selector */}
+            <div className="bg-slate-950/60 border border-slate-800 rounded-2xl p-3.5 space-y-2">
+              <label className="text-[10px] text-slate-400 flex items-center gap-1.5 uppercase tracking-wider font-bold">
+                <UserCheck className="w-3.5 h-3.5 text-cyan-400" /> Style Archetype
+              </label>
+              <select
+                value={selectedFighter}
+                onChange={(e) => {
+                  setSelectedFighter(e.target.value);
+                  if (e.target.value === 'MEXICAN_PRESSURE') setActiveTheme('ggg');
+                  else setActiveTheme('bivol');
+                }}
+                className="w-full bg-slate-900 border border-slate-800 text-slate-200 text-xs rounded-xl p-2.5 focus:outline-none focus:border-cyan-500 h-11 touch-manipulation"
+              >
+                {Object.values(FIGHTER_STYLES).map((f) => (
+                  <option key={f.id} value={f.id}>
+                    {f.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* Live Punch Counts */}
+            <div className="bg-slate-950/60 border border-slate-800 rounded-2xl p-3.5">
+              <span className="text-[10px] text-slate-400 flex items-center gap-1.5 mb-2.5 uppercase tracking-wider font-bold">
+                <Target className="w-3.5 h-3.5 text-slate-400" /> Live Punches
+              </span>
+
+              <div className="grid grid-cols-3 gap-2 text-center">
+                <div className="bg-slate-900 p-2.5 rounded-xl border border-slate-800">
+                  <span className={`text-xl font-extrabold ${currentTheme.primary}`}>{jabs}</span>
+                  <p className="text-[9px] text-slate-400 mt-0.5 font-bold">JABS</p>
+                </div>
+                <div className="bg-slate-900 p-2.5 rounded-xl border border-slate-800">
+                  <span className="text-xl font-extrabold text-slate-300">{crosses}</span>
+                  <p className="text-[9px] text-slate-400 mt-0.5 font-bold">CROSSES</p>
+                </div>
+                <div className="bg-slate-900 p-2.5 rounded-xl border border-slate-800">
+                  <span className="text-xl font-extrabold text-amber-400">{combosCount}</span>
+                  <p className="text-[9px] text-slate-400 mt-0.5 font-bold">COMBOS</p>
+                </div>
               </div>
             </div>
+
+            {/* AI Coach Feedback Box */}
+            <div className="bg-slate-950/80 border border-slate-800 rounded-2xl p-3.5 space-y-1">
+              <span className="text-[10px] text-slate-400 uppercase tracking-wider font-bold block">AI Coach Feedback</span>
+              <p className="text-xs font-medium text-emerald-400 leading-relaxed">
+                {aiAdvice ? aiAdvice.feedback : "Awaiting movement telemetry..."}
+              </p>
+            </div>
+
+          </div>
+
+          <div className="text-[9px] text-slate-500 text-center pt-2">
+            Brawler Labs • Multi-Style Biomechanics Engine
           </div>
         </div>
       </div>
 
-      {/* Mobile Bottom Navigation Control Bar */}
-      <div className="sm:hidden fixed bottom-0 left-0 right-0 bg-slate-950/95 backdrop-blur-lg border-t border-slate-800/80 p-2.5 z-40 flex items-center justify-around gap-2 shadow-2xl">
+      {/* Mobile Bottom Navigation Bar */}
+      <div className="sm:hidden bg-slate-950/95 backdrop-blur-lg border-t border-slate-800/80 p-2 shrink-0 z-40 flex items-center justify-around gap-2 shadow-2xl">
         <button
           onClick={startCamera}
           disabled={isLoadingModel}
-          className="flex-1 flex flex-col items-center justify-center h-12 bg-slate-900 active:bg-slate-800 text-slate-200 border border-slate-800 rounded-xl text-[10px] font-bold touch-manipulation"
+          className="flex-1 flex flex-col items-center justify-center h-11 bg-slate-900 text-slate-200 border border-slate-800 rounded-xl text-[10px] font-bold touch-manipulation"
         >
-          <Camera className="w-4 h-4 mb-0.5 text-cyan-400" />
+          <Camera className="w-3.5 h-3.5 mb-0.5 text-cyan-400" />
           <span>Camera</span>
         </button>
 
-        <label className="flex-1 flex flex-col items-center justify-center h-12 bg-slate-900 active:bg-slate-800 text-slate-200 border border-slate-800 rounded-xl text-[10px] font-bold cursor-pointer touch-manipulation">
-          <Upload className="w-4 h-4 mb-0.5 text-slate-400" />
+        <label className="flex-1 flex flex-col items-center justify-center h-11 bg-slate-900 text-slate-200 border border-slate-800 rounded-xl text-[10px] font-bold cursor-pointer touch-manipulation">
+          <Upload className="w-3.5 h-3.5 mb-0.5 text-slate-400" />
           <span>Upload</span>
           <input type="file" accept="video/*" onChange={handleVideoUpload} className="hidden" />
         </label>
 
         <button
           onClick={() => setShowSettingsDrawer(true)}
-          className="flex-1 flex flex-col items-center justify-center h-12 bg-slate-900 active:bg-slate-800 text-slate-300 border border-slate-800 rounded-xl text-[10px] font-bold touch-manipulation"
+          className="flex-1 flex flex-col items-center justify-center h-11 bg-slate-900 text-slate-300 border border-slate-800 rounded-xl text-[10px] font-bold touch-manipulation"
         >
-          <Settings className="w-4 h-4 mb-0.5 text-slate-400" />
+          <Settings className="w-3.5 h-3.5 mb-0.5 text-slate-400" />
           <span>Settings</span>
         </button>
 
         <button
           onClick={handleReset}
-          className="w-12 h-12 flex items-center justify-center bg-slate-900 active:bg-slate-800 text-slate-400 border border-slate-800 rounded-xl touch-manipulation shrink-0"
+          className="w-11 h-11 flex items-center justify-center bg-slate-900 text-slate-400 border border-slate-800 rounded-xl touch-manipulation shrink-0"
         >
-          <RotateCcw className="w-4 h-4" />
+          <RotateCcw className="w-3.5 h-3.5" />
         </button>
       </div>
 
@@ -782,7 +797,7 @@ export default function App() {
 
               {/* Audio Controls */}
               <div className="space-y-2.5">
-                <label className="text-xs text-slate-500 block uppercase font-bold">Voice Coaching & SFX</label>
+                <label className="text-xs text-slate-500 block uppercase font-bold">Voice & SFX Audio</label>
                 <button
                   onClick={() => setAudioFeedback(!audioFeedback)}
                   className="w-full h-14 px-4 bg-slate-900 border border-slate-800 rounded-xl flex justify-between items-center touch-manipulation"
@@ -799,7 +814,7 @@ export default function App() {
 
               {/* Camera Preferences */}
               <div className="space-y-2.5">
-                <label className="text-xs text-slate-500 block uppercase font-bold">Video Options</label>
+                <label className="text-xs text-slate-500 block uppercase font-bold">Video Settings</label>
                 <div className="grid grid-cols-2 gap-2">
                   <button
                     onClick={() => setMirrorVideo(!mirrorVideo)}
@@ -821,7 +836,7 @@ export default function App() {
             </div>
 
             <div className="text-[10px] text-slate-600 text-center border-t border-slate-900 pt-4 mt-6">
-              Brawler Boxing Labs v2.0 • Smooth PWA Edition
+              Brawler Boxing Labs v2.0 • Full Suite
             </div>
           </div>
         </div>
