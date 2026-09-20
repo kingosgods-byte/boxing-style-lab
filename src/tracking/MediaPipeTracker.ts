@@ -11,37 +11,62 @@ export class MediaPipeTracker {
   private lastTimestamp = -1;
 
   async init() {
-    if (this.pose) return;
+    if (this.pose) {
+      return;
+    }
 
-    const vision =
-      await FilesetResolver.forVisionTasks(
-        "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.22/wasm"
+    try {
+      console.log(
+        "MediaPipe: starting initialization..."
       );
 
-    this.pose =
-      await PoseLandmarker.createFromOptions(
-        vision,
-        {
-          baseOptions: {
-            modelAssetPath:
-              "https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/1/pose_landmarker_lite.task",
+      const vision =
+        await FilesetResolver.forVisionTasks(
+          "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.22/wasm"
+        );
 
-            delegate: "CPU",
-          },
-
-          runningMode: "VIDEO",
-
-          numPoses: 1,
-
-          minPoseDetectionConfidence: 0.4,
-
-          minPosePresenceConfidence: 0.4,
-
-          minTrackingConfidence: 0.4,
-        }
+      console.log(
+        "MediaPipe: WASM loaded."
       );
 
-    this.lastTimestamp = -1;
+      this.pose =
+        await PoseLandmarker.createFromOptions(
+          vision,
+          {
+            baseOptions: {
+              modelAssetPath:
+                "https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/1/pose_landmarker_lite.task",
+
+              delegate: "CPU",
+            },
+
+            runningMode: "VIDEO",
+
+            numPoses: 1,
+
+            minPoseDetectionConfidence: 0.4,
+
+            minPosePresenceConfidence: 0.4,
+
+            minTrackingConfidence: 0.4,
+          }
+        );
+
+      this.lastTimestamp = -1;
+
+      console.log(
+        "MediaPipe: PoseLandmarker created successfully."
+      );
+    } catch (error) {
+      console.error(
+        "MediaPipe initialization error:",
+        error
+      );
+
+      this.pose = null;
+
+      throw error;
+    }
   }
 
   detect(
@@ -52,27 +77,38 @@ export class MediaPipeTracker {
       return null;
     }
 
-    /*
-     * MediaPipe VIDEO mode requires
-     * monotonically increasing timestamps.
-     */
-    if (timestamp <= this.lastTimestamp) {
+    if (
+      timestamp <=
+      this.lastTimestamp
+    ) {
       timestamp =
         this.lastTimestamp + 1;
     }
 
     this.lastTimestamp = timestamp;
 
-    const result =
-      this.pose.detectForVideo(
-        video,
-        timestamp
+    try {
+      const result =
+        this.pose.detectForVideo(
+          video,
+          timestamp
+        );
+
+      const landmarks =
+        result.landmarks?.[0];
+
+      if (!landmarks) {
+        return null;
+      }
+
+      return landmarks as Landmark[];
+    } catch (error) {
+      console.error(
+        "MediaPipe detection error:",
+        error
       );
 
-    return (
-      (result.landmarks?.[0] as
-        | Landmark[]
-        | undefined) ?? null
-    );
+      return null;
+    }
   }
 }
