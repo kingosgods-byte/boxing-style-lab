@@ -1,4 +1,9 @@
-import React, { useState, useRef, useEffect } from "react";
+import React, {
+  useState,
+  useRef,
+  useEffect,
+} from "react";
+
 import {
   Target,
   Activity,
@@ -19,31 +24,39 @@ import {
   Award,
   Cloud,
 } from "lucide-react";
-import {
-  PoseLandmarker,
-  FilesetResolver,
-} from "@mediapipe/tasks-vision";
 
 import {
   SovietPunchAnalyzer,
   PunchEvent,
 } from "./engine/punchDetector";
+
 import {
   AICoachEngine,
   AIAdvice,
 } from "./engine/aiCoachEngine";
+
 import { FIGHTER_STYLES } from "./engine/styleProfiles";
+
 import {
   UserDataEngine,
   UserStats,
 } from "./engine/userDataEngine";
+
 import {
   ComboDetector,
   ComboEvent,
 } from "./engine/comboDetector";
+
 import { uploadWorkoutSession } from "./services/supabaseService";
 
-type Theme = "bivol" | "ggg" | "loma";
+import { MediaPipeTracker } from "./tracking/MediaPipeTracker";
+
+import type { Landmark } from "./types";
+
+type Theme =
+  | "bivol"
+  | "ggg"
+  | "loma";
 
 interface ThemeConfig {
   primary: string;
@@ -51,19 +64,24 @@ interface ThemeConfig {
   badgeBg: string;
 }
 
-const THEMES: Record<Theme, ThemeConfig> = {
+const THEMES: Record<
+  Theme,
+  ThemeConfig
+> = {
   bivol: {
     primary: "text-cyan-400",
     accentHex: "#06b6d4",
     badgeBg:
       "bg-cyan-950/80 text-cyan-400 border-cyan-800",
   },
+
   ggg: {
     primary: "text-red-500",
     accentHex: "#ef4444",
     badgeBg:
       "bg-red-950/80 text-red-400 border-red-800",
   },
+
   loma: {
     primary: "text-amber-400",
     accentHex: "#f59e0b",
@@ -82,77 +100,196 @@ interface SessionReport {
   videoUrl?: string;
 }
 
+/*
+ * MediaPipe Pose landmark connections.
+ *
+ * 0  nose
+ * 11/12 shoulders
+ * 13/14 elbows
+ * 15/16 wrists
+ * 23/24 hips
+ * 25/26 knees
+ * 27/28 ankles
+ * 29/30 heels
+ * 31/32 feet
+ */
+const POSE_CONNECTIONS: Array<
+  [number, number]
+> = [
+  // Head
+  [0, 1],
+  [1, 2],
+  [2, 3],
+  [3, 7],
+  [0, 4],
+  [4, 5],
+  [5, 6],
+  [6, 8],
+
+  // Face / ears
+  [9, 10],
+
+  // Torso
+  [11, 12],
+  [11, 23],
+  [12, 24],
+  [23, 24],
+
+  // Left arm
+  [11, 13],
+  [13, 15],
+
+  // Right arm
+  [12, 14],
+  [14, 16],
+
+  // Left hand
+  [15, 17],
+  [15, 19],
+  [15, 21],
+
+  // Right hand
+  [16, 18],
+  [16, 20],
+  [16, 22],
+
+  // Left leg
+  [23, 25],
+  [25, 27],
+
+  // Right leg
+  [24, 26],
+  [26, 28],
+
+  // Feet
+  [27, 29],
+  [29, 31],
+  [28, 30],
+  [30, 32],
+];
+
 export default function App() {
-  const [jabs, setJabs] = useState(0);
-  const [crosses, setCrosses] = useState(0);
-  const [combosCount, setCombosCount] = useState(0);
+  const [jabs, setJabs] =
+    useState(0);
+
+  const [crosses, setCrosses] =
+    useState(0);
+
+  const [combosCount, setCombosCount] =
+    useState(0);
 
   const [lastPunch, setLastPunch] =
     useState<PunchEvent | null>(null);
+
   const [lastCombo, setLastCombo] =
     useState<ComboEvent | null>(null);
+
   const [aiAdvice, setAiAdvice] =
     useState<AIAdvice | null>(null);
 
-  const [isCameraActive, setIsCameraActive] =
-    useState(false);
+  const [
+    isCameraActive,
+    setIsCameraActive,
+  ] = useState(false);
 
-  const [isLoadingModel, setIsLoadingModel] =
-    useState(true);
+  const [
+    isLoadingModel,
+    setIsLoadingModel,
+  ] = useState(true);
 
-  const [modelError, setModelError] =
-    useState<string | null>(null);
+  const [
+    modelError,
+    setModelError,
+  ] = useState<string | null>(null);
 
-  const [isRecording, setIsRecording] =
-    useState(false);
+  const [
+    isRecording,
+    setIsRecording,
+  ] = useState(false);
 
-  const [countdown, setCountdown] =
-    useState<number | null>(null);
+  const [
+    countdown,
+    setCountdown,
+  ] = useState<number | null>(null);
 
-  const [recordingSeconds, setRecordingSeconds] =
-    useState(0);
+  const [
+    recordingSeconds,
+    setRecordingSeconds,
+  ] = useState(0);
 
-  const [sessionReport, setSessionReport] =
-    useState<SessionReport | null>(null);
+  const [
+    sessionReport,
+    setSessionReport,
+  ] = useState<SessionReport | null>(
+    null
+  );
 
-  const [isUploading, setIsUploading] =
-    useState(false);
+  const [
+    isUploading,
+    setIsUploading,
+  ] = useState(false);
 
-  const [selectedFighter, setSelectedFighter] =
-    useState("SOVIET_CLASSIC");
+  const [
+    selectedFighter,
+    setSelectedFighter,
+  ] = useState(
+    "SOVIET_CLASSIC"
+  );
 
-  const [activeTheme, setActiveTheme] =
-    useState<Theme>("bivol");
+  const [
+    activeTheme,
+    setActiveTheme,
+  ] = useState<Theme>("bivol");
 
-  const [showSettingsDrawer, setShowSettingsDrawer] =
-    useState(false);
+  const [
+    showSettingsDrawer,
+    setShowSettingsDrawer,
+  ] = useState(false);
 
-  const [mirrorVideo, setMirrorVideo] =
-    useState(true);
+  const [
+    mirrorVideo,
+    setMirrorVideo,
+  ] = useState(true);
 
-  const [showSkeleton, setShowSkeleton] =
-    useState(true);
+  const [
+    showSkeleton,
+    setShowSkeleton,
+  ] = useState(true);
 
-  const [audioFeedback, setAudioFeedback] =
-    useState(true);
+  const [
+    audioFeedback,
+    setAudioFeedback,
+  ] = useState(true);
 
-  const [userStats, setUserStats] =
-    useState<UserStats>({
-      totalPunches: 0,
-      avgJabAngle: 150,
-      avgCrossAngle: 155,
-      avgVelocity: 4.0,
-      samplesCount: 0,
-    });
+  const [
+    userStats,
+    setUserStats,
+  ] = useState<UserStats>({
+    totalPunches: 0,
+    avgJabAngle: 150,
+    avgCrossAngle: 155,
+    avgVelocity: 4.0,
+    samplesCount: 0,
+  });
 
   const videoRef =
-    useRef<HTMLVideoElement | null>(null);
+    useRef<HTMLVideoElement | null>(
+      null
+    );
 
   const canvasRef =
-    useRef<HTMLCanvasElement | null>(null);
+    useRef<HTMLCanvasElement | null>(
+      null
+    );
 
-  const landmarkerRef =
-    useRef<PoseLandmarker | null>(null);
+  /*
+   * THIS is now the only MediaPipe tracker
+   * used by the application.
+   */
+  const trackerRef =
+    useRef<MediaPipeTracker | null>(
+      null
+    );
 
   const animFrameRef =
     useRef<number | null>(null);
@@ -164,13 +301,15 @@ export default function App() {
     useRef<any | null>(null);
 
   const prevLandmarksRef =
-    useRef<any[] | null>(null);
+    useRef<Landmark[] | null>(null);
 
   const audioCtxRef =
     useRef<AudioContext | null>(null);
 
   const mediaRecorderRef =
-    useRef<MediaRecorder | null>(null);
+    useRef<MediaRecorder | null>(
+      null
+    );
 
   const recordedChunksRef =
     useRef<Blob[]>([]);
@@ -205,144 +344,144 @@ export default function App() {
     THEMES[activeTheme];
 
   /*
-   * MEDIA PIPE INITIALIZATION
+   * MEDIA PIPE TRACKER INITIALIZATION
    *
-   * Important:
-   * - Pin WASM to the installed package version.
-   * - Use CPU instead of GPU for maximum browser compatibility.
-   * - Always release the loading state even if initialization fails.
+   * IMPORTANT:
+   * App.tsx no longer creates PoseLandmarker
+   * directly. MediaPipeTracker owns that logic.
    */
   useEffect(() => {
+    let cancelled = false;
+
     setUserStats(
       userDataRef.current.getUserStats()
     );
 
-    let cancelled = false;
-
-    async function initMediaPipe() {
+    async function initializeTracker() {
       try {
         setIsLoadingModel(true);
         setModelError(null);
 
-        const vision =
-          await FilesetResolver.forVisionTasks(
-            "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.22/wasm"
-          );
+        const tracker =
+          new MediaPipeTracker();
 
-        if (cancelled) return;
-
-        const landmarker =
-          await PoseLandmarker.createFromOptions(
-            vision,
-            {
-              baseOptions: {
-                modelAssetPath:
-                  "https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/1/pose_landmarker_lite.task",
-
-                /*
-                 * CPU is deliberately used here.
-                 * GPU initialization can fail on some
-                 * browsers/devices and prevent the app
-                 * from ever becoming usable.
-                 */
-                delegate: "CPU",
-              },
-
-              runningMode: "VIDEO",
-
-              numPoses: 1,
-
-              minPoseDetectionConfidence: 0.4,
-
-              minPosePresenceConfidence: 0.4,
-
-              minTrackingConfidence: 0.4,
-            }
-          );
+        await tracker.init();
 
         if (cancelled) {
-          landmarker.close();
           return;
         }
 
-        landmarkerRef.current = landmarker;
+        trackerRef.current =
+          tracker;
 
         setIsLoadingModel(false);
         setModelError(null);
 
         console.log(
-          "MediaPipe PoseLandmarker initialized successfully."
+          "MediaPipeTracker initialized successfully."
         );
-      } catch (err) {
+      } catch (error) {
         console.error(
-          "Failed to initialize MediaPipe:",
-          err
+          "MediaPipeTracker initialization failed:",
+          error
         );
 
         if (!cancelled) {
           setIsLoadingModel(false);
+
           setModelError(
-            "AI pose tracking could not initialize. Camera and video can still be opened, but biomechanics tracking may be unavailable."
+            "AI pose tracking could not initialize. Camera and video can still be opened."
           );
         }
       }
     }
 
-    initMediaPipe();
+    initializeTracker();
 
     return () => {
       cancelled = true;
 
-      if (animFrameRef.current !== null) {
+      if (
+        animFrameRef.current !==
+        null
+      ) {
         cancelAnimationFrame(
           animFrameRef.current
         );
+
+        animFrameRef.current = null;
       }
 
-      if (timerIntervalRef.current !== null) {
+      if (
+        timerIntervalRef.current !==
+        null
+      ) {
         clearInterval(
           timerIntervalRef.current
         );
+
+        timerIntervalRef.current = null;
       }
 
-      if (landmarkerRef.current) {
-        landmarkerRef.current.close();
-        landmarkerRef.current = null;
+      if (mediaStreamRef.current) {
+        mediaStreamRef.current
+          .getTracks()
+          .forEach((track) =>
+            track.stop()
+          );
+
+        mediaStreamRef.current =
+          null;
+      }
+
+      if (uploadedVideoUrlRef.current) {
+        URL.revokeObjectURL(
+          uploadedVideoUrlRef.current
+        );
+
+        uploadedVideoUrlRef.current =
+          null;
       }
 
       releaseWakeLock();
     };
   }, []);
 
-  const requestWakeLock = async () => {
-    try {
-      if ("wakeLock" in navigator) {
-        wakeLockRef.current =
-          await (navigator as any).wakeLock.request(
-            "screen"
-          );
+  const requestWakeLock =
+    async () => {
+      try {
+        if ("wakeLock" in navigator) {
+          wakeLockRef.current =
+            await (
+              navigator as any
+            ).wakeLock.request(
+              "screen"
+            );
+        }
+      } catch (error) {
+        console.log(
+          "Wake Lock request failed:",
+          error
+        );
       }
-    } catch (err) {
-      console.log(
-        "Wake Lock request failed:",
-        err
-      );
-    }
-  };
+    };
 
-  const releaseWakeLock = async () => {
-    try {
-      if (wakeLockRef.current) {
-        await wakeLockRef.current.release();
-        wakeLockRef.current = null;
+  const releaseWakeLock =
+    async () => {
+      try {
+        if (wakeLockRef.current) {
+          await wakeLockRef.current.release();
+
+          wakeLockRef.current =
+            null;
+        }
+      } catch (error) {
+        console.log(
+          "Wake Lock release failed:",
+          error
+        );
       }
-    } catch (err) {
-      console.log(
-        "Wake Lock release failed:",
-        err
-      );
-    }
-  };
+    };
 
   useEffect(() => {
     if (isRecording) {
@@ -351,36 +490,52 @@ export default function App() {
       timerIntervalRef.current =
         window.setInterval(() => {
           setRecordingSeconds(
-            (prev) => prev + 1
+            (previous) =>
+              previous + 1
           );
         }, 1000);
     } else {
       releaseWakeLock();
 
-      if (timerIntervalRef.current !== null) {
+      if (
+        timerIntervalRef.current !==
+        null
+      ) {
         clearInterval(
           timerIntervalRef.current
         );
+
+        timerIntervalRef.current =
+          null;
       }
     }
 
     return () => {
-      if (timerIntervalRef.current !== null) {
+      if (
+        timerIntervalRef.current !==
+        null
+      ) {
         clearInterval(
           timerIntervalRef.current
         );
+
+        timerIntervalRef.current =
+          null;
       }
     };
   }, [isRecording]);
 
   const playPunchSfx = () => {
-    if (!audioFeedback) return;
+    if (!audioFeedback) {
+      return;
+    }
 
     try {
       if (!audioCtxRef.current) {
         audioCtxRef.current =
           new (window.AudioContext ||
-            (window as any).webkitAudioContext)();
+            (window as any)
+              .webkitAudioContext)();
       }
 
       const ctx =
@@ -390,20 +545,21 @@ export default function App() {
         ctx.resume();
       }
 
-      const osc =
+      const oscillator =
         ctx.createOscillator();
 
       const gain =
         ctx.createGain();
 
-      osc.type = "triangle";
+      oscillator.type =
+        "triangle";
 
-      osc.frequency.setValueAtTime(
+      oscillator.frequency.setValueAtTime(
         140,
         ctx.currentTime
       );
 
-      osc.frequency.exponentialRampToValueAtTime(
+      oscillator.frequency.exponentialRampToValueAtTime(
         30,
         ctx.currentTime + 0.12
       );
@@ -418,11 +574,12 @@ export default function App() {
         ctx.currentTime + 0.12
       );
 
-      osc.connect(gain);
+      oscillator.connect(gain);
       gain.connect(ctx.destination);
 
-      osc.start();
-      osc.stop(
+      oscillator.start();
+
+      oscillator.stop(
         ctx.currentTime + 0.12
       );
     } catch {
@@ -456,39 +613,49 @@ export default function App() {
   };
 
   const smoothLandmarks = (
-    rawLandmarks: any[]
-  ) => {
+    rawLandmarks: Landmark[]
+  ): Landmark[] => {
     const alpha = 0.4;
 
-    if (!prevLandmarksRef.current) {
+    if (
+      !prevLandmarksRef.current
+    ) {
       prevLandmarksRef.current =
         rawLandmarks;
 
       return rawLandmarks;
     }
 
+    const previous =
+      prevLandmarksRef.current;
+
     const smoothed =
       rawLandmarks.map(
-        (pt, i) => {
-          const prev =
-            prevLandmarksRef.current?.[i] ||
-            pt;
+        (point, index) => {
+          const oldPoint =
+            previous[index] ||
+            point;
 
           return {
+            ...point,
+
             x:
-              prev.x * alpha +
-              pt.x * (1 - alpha),
+              oldPoint.x *
+                alpha +
+              point.x *
+                (1 - alpha),
 
             y:
-              prev.y * alpha +
-              pt.y * (1 - alpha),
+              oldPoint.y *
+                alpha +
+              point.y *
+                (1 - alpha),
 
             z:
-              prev.z * alpha +
-              pt.z * (1 - alpha),
-
-            visibility:
-              pt.visibility,
+              oldPoint.z *
+                alpha +
+              point.z *
+                (1 - alpha),
           };
         }
       );
@@ -499,72 +666,189 @@ export default function App() {
     return smoothed;
   };
 
-  const processVideoFrame = () => {
-    const video =
-      videoRef.current;
+  const drawSkeleton = (
+    ctx: CanvasRenderingContext2D,
+    landmarks: Landmark[],
+    width: number,
+    height: number
+  ) => {
+    ctx.save();
 
-    if (!video) {
-      animFrameRef.current =
-        requestAnimationFrame(
-          processVideoFrame
-        );
+    ctx.strokeStyle =
+      currentTheme.accentHex;
 
-      return;
+    ctx.fillStyle =
+      currentTheme.accentHex;
+
+    ctx.lineWidth = Math.max(
+      3,
+      Math.round(width / 260)
+    );
+
+    ctx.lineCap = "round";
+    ctx.lineJoin = "round";
+
+    const isVisible = (
+      point: Landmark
+    ) => {
+      return (
+        (point.visibility ??
+          1) > 0.25
+      );
+    };
+
+    for (const [
+      firstIndex,
+      secondIndex,
+    ] of POSE_CONNECTIONS) {
+      const first =
+        landmarks[firstIndex];
+
+      const second =
+        landmarks[secondIndex];
+
+      if (!first || !second) {
+        continue;
+      }
+
+      if (
+        !isVisible(first) ||
+        !isVisible(second)
+      ) {
+        continue;
+      }
+
+      ctx.beginPath();
+
+      ctx.moveTo(
+        first.x * width,
+        first.y * height
+      );
+
+      ctx.lineTo(
+        second.x * width,
+        second.y * height
+      );
+
+      ctx.stroke();
     }
 
     /*
-     * The video itself is allowed to run
-     * even if MediaPipe hasn't loaded yet.
+     * Draw joints on top of the bones.
      */
-    if (
-      video.paused ||
-      video.ended ||
-      video.videoWidth === 0
-    ) {
-      animFrameRef.current =
-        requestAnimationFrame(
-          processVideoFrame
-        );
+    for (const point of landmarks) {
+      if (!point) {
+        continue;
+      }
 
-      return;
+      if (!isVisible(point)) {
+        continue;
+      }
+
+      ctx.beginPath();
+
+      ctx.arc(
+        point.x * width,
+        point.y * height,
+        Math.max(
+          3,
+          width / 250
+        ),
+        0,
+        Math.PI * 2
+      );
+
+      ctx.fill();
     }
 
-    const canvas =
-      canvasRef.current;
+    ctx.restore();
+  };
 
-    const landmarker =
-      landmarkerRef.current;
+  /*
+   * Main camera/video tracking loop.
+   */
+  const processVideoFrame =
+    () => {
+      const video =
+        videoRef.current;
 
-    /*
-     * If MediaPipe isn't ready, don't block
-     * camera/video playback.
-     */
-    if (landmarker) {
+      if (!video) {
+        animFrameRef.current =
+          requestAnimationFrame(
+            processVideoFrame
+          );
+
+        return;
+      }
+
+      /*
+       * Keep checking until the video
+       * has real dimensions.
+       */
+      if (
+        video.paused ||
+        video.ended ||
+        video.videoWidth === 0 ||
+        video.videoHeight === 0
+      ) {
+        animFrameRef.current =
+          requestAnimationFrame(
+            processVideoFrame
+          );
+
+        return;
+      }
+
+      const canvas =
+        canvasRef.current;
+
+      /*
+       * IMPORTANT:
+       * Use the MediaPipeTracker rather
+       * than creating another landmarker.
+       */
+      const tracker =
+        trackerRef.current;
+
+      if (!tracker) {
+        animFrameRef.current =
+          requestAnimationFrame(
+            processVideoFrame
+          );
+
+        return;
+      }
+
       try {
-        const results =
-          landmarker.detectForVideo(
+        const landmarks =
+          tracker.detect(
             video,
             performance.now()
           );
 
         if (canvas) {
+          /*
+           * Canvas uses the exact same
+           * intrinsic dimensions as the
+           * source video.
+           */
+          if (
+            canvas.width !==
+              video.videoWidth ||
+            canvas.height !==
+              video.videoHeight
+          ) {
+            canvas.width =
+              video.videoWidth;
+
+            canvas.height =
+              video.videoHeight;
+          }
+
           const ctx =
             canvas.getContext("2d");
 
           if (ctx) {
-            if (
-              canvas.width !==
-                video.videoWidth ||
-              canvas.height !==
-                video.videoHeight
-            ) {
-              canvas.width =
-                video.videoWidth;
-
-              canvas.height =
-                video.videoHeight;
-            }
-
             ctx.clearRect(
               0,
               0,
@@ -572,43 +856,45 @@ export default function App() {
               canvas.height
             );
 
-            if (
-              results.landmarks &&
-              results.landmarks[0]
-            ) {
-              const rawLandmarks =
-                results.landmarks[0];
-
-              const landmarks =
+            if (landmarks) {
+              const smoothed =
                 smoothLandmarks(
-                  rawLandmarks
+                  landmarks
                 );
 
               if (showSkeleton) {
                 drawSkeleton(
                   ctx,
-                  landmarks,
+                  smoothed,
                   canvas.width,
                   canvas.height
                 );
               }
 
+              /*
+               * Feed the exact same
+               * landmarks into the
+               * biomechanics engine.
+               */
               const punch =
                 analyzerRef.current.update(
-                  landmarks
+                  smoothed
                 );
 
               if (punch) {
-                setLastPunch(punch);
+                setLastPunch(
+                  punch
+                );
 
                 playPunchSfx();
 
                 if (
-                  punch.type === "jab"
+                  punch.type ===
+                  "jab"
                 ) {
                   setJabs(
-                    (prev) =>
-                      prev + 1
+                    (previous) =>
+                      previous + 1
                   );
                 }
 
@@ -617,8 +903,8 @@ export default function App() {
                   "cross"
                 ) {
                   setCrosses(
-                    (prev) =>
-                      prev + 1
+                    (previous) =>
+                      previous + 1
                   );
                 }
 
@@ -633,8 +919,8 @@ export default function App() {
                   );
 
                   setCombosCount(
-                    (prev) =>
-                      prev + 1
+                    (previous) =>
+                      previous + 1
                   );
 
                   speakFeedback(
@@ -675,7 +961,7 @@ export default function App() {
                       ? "jab"
                       : "cross",
 
-                    landmarks,
+                    smoothed,
 
                     punch.elbowAngle,
 
@@ -699,28 +985,38 @@ export default function App() {
                   );
                 }
               }
+            } else {
+              /*
+               * No pose detected.
+               * Reset smoothing so the
+               * next detected pose does
+               * not interpolate from an
+               * old position.
+               */
+              prevLandmarksRef.current =
+                null;
             }
           }
         }
-      } catch (err) {
+      } catch (error) {
         console.error(
           "Pose detection error:",
-          err
+          error
         );
       }
-    }
 
-    animFrameRef.current =
-      requestAnimationFrame(
-        processVideoFrame
-      );
-  };
+      animFrameRef.current =
+        requestAnimationFrame(
+          processVideoFrame
+        );
+    };
 
   const startCamera =
     async () => {
       if (
         !navigator.mediaDevices ||
-        !navigator.mediaDevices.getUserMedia
+        !navigator.mediaDevices
+          .getUserMedia
       ) {
         alert(
           "Camera access is not supported by this browser."
@@ -735,13 +1031,12 @@ export default function App() {
           window
         ) {
           window.speechSynthesis.speak(
-            new SpeechSynthesisUtterance("")
+            new SpeechSynthesisUtterance(
+              ""
+            )
           );
         }
 
-        /*
-         * Stop any previous camera stream.
-         */
         if (
           mediaStreamRef.current
         ) {
@@ -755,27 +1050,27 @@ export default function App() {
             null;
         }
 
-        const constraints: MediaStreamConstraints =
-          {
-            video: {
-              facingMode: "user",
-              width: {
-                ideal: 1280,
-              },
-              height: {
-                ideal: 720,
-              },
-              frameRate: {
-                ideal: 30,
-              },
-            },
-
-            audio: false,
-          };
-
         const stream =
           await navigator.mediaDevices.getUserMedia(
-            constraints
+            {
+              video: {
+                facingMode: "user",
+
+                width: {
+                  ideal: 1280,
+                },
+
+                height: {
+                  ideal: 720,
+                },
+
+                frameRate: {
+                  ideal: 30,
+                },
+              },
+
+              audio: false,
+            }
           );
 
         mediaStreamRef.current =
@@ -796,11 +1091,14 @@ export default function App() {
           );
         }
 
-        /*
-         * Clear uploaded video state.
-         */
         video.pause();
-        video.removeAttribute("src");
+
+        video.removeAttribute(
+          "src"
+        );
+
+        video.srcObject = null;
+
         video.load();
 
         video.srcObject =
@@ -817,11 +1115,13 @@ export default function App() {
 
         setIsCameraActive(true);
 
-        setModelError(
-          landmarkerRef.current
-            ? null
-            : "Camera is active, but AI pose tracking is not ready."
-        );
+        if (trackerRef.current) {
+          setModelError(null);
+        } else {
+          setModelError(
+            "Camera is active, but AI pose tracking is still initializing."
+          );
+        }
 
         if (
           animFrameRef.current !==
@@ -836,10 +1136,10 @@ export default function App() {
           null;
 
         processVideoFrame();
-      } catch (err) {
+      } catch (error) {
         console.error(
           "Camera access failed:",
-          err
+          error
         );
 
         setIsCameraActive(false);
@@ -851,21 +1151,25 @@ export default function App() {
     };
 
   const handleVideoUpload = (
-    e: React.ChangeEvent<HTMLInputElement>
+    event: React.ChangeEvent<HTMLInputElement>
   ) => {
     if (
       "speechSynthesis" in
       window
     ) {
       window.speechSynthesis.speak(
-        new SpeechSynthesisUtterance("")
+        new SpeechSynthesisUtterance(
+          ""
+        )
       );
     }
 
     const file =
-      e.target.files?.[0];
+      event.target.files?.[0];
 
-    if (!file) return;
+    if (!file) {
+      return;
+    }
 
     console.log(
       "Selected video:",
@@ -874,9 +1178,6 @@ export default function App() {
       file.size
     );
 
-    /*
-     * Stop camera if one is running.
-     */
     if (
       mediaStreamRef.current
     ) {
@@ -901,9 +1202,6 @@ export default function App() {
       return;
     }
 
-    /*
-     * Clean up the previous object URL.
-     */
     if (
       uploadedVideoUrlRef.current
     ) {
@@ -933,10 +1231,6 @@ export default function App() {
 
     video.load();
 
-    /*
-     * Wait until the browser has loaded
-     * enough metadata before playing.
-     */
     const startUploadedVideo =
       async () => {
         try {
@@ -944,11 +1238,13 @@ export default function App() {
 
           setIsCameraActive(true);
 
-          setModelError(
-            landmarkerRef.current
-              ? null
-              : "Video is playing, but AI pose tracking is not ready."
-          );
+          if (trackerRef.current) {
+            setModelError(null);
+          } else {
+            setModelError(
+              "Video is playing, but AI pose tracking is still initializing."
+            );
+          }
 
           if (
             animFrameRef.current !==
@@ -963,10 +1259,10 @@ export default function App() {
             null;
 
           processVideoFrame();
-        } catch (err) {
+        } catch (error) {
           console.error(
             "Uploaded video playback failed:",
-            err
+            error
           );
 
           alert(
@@ -989,86 +1285,7 @@ export default function App() {
         };
     }
 
-    /*
-     * Allow selecting the same file again.
-     */
-    e.target.value = "";
-  };
-
-  const drawSkeleton = (
-    ctx: CanvasRenderingContext2D,
-    landmarks: any[],
-    width: number,
-    height: number
-  ) => {
-    ctx.strokeStyle =
-      currentTheme.accentHex;
-
-    ctx.lineWidth = Math.max(
-      3,
-      Math.round(width / 200)
-    );
-
-    ctx.lineCap = "round";
-    ctx.lineJoin = "round";
-
-    const drawLine = (
-      p1: number,
-      p2: number
-    ) => {
-      if (
-        !landmarks[p1] ||
-        !landmarks[p2]
-      ) {
-        return;
-      }
-
-      const v1 =
-        landmarks[p1]
-          .visibility ?? 1;
-
-      const v2 =
-        landmarks[p2]
-          .visibility ?? 1;
-
-      if (
-        v1 > 0.35 &&
-        v2 > 0.35
-      ) {
-        ctx.beginPath();
-
-        ctx.moveTo(
-          landmarks[p1].x *
-            width,
-
-          landmarks[p1].y *
-            height
-        );
-
-        ctx.lineTo(
-          landmarks[p2].x *
-            width,
-
-          landmarks[p2].y *
-            height
-        );
-
-        ctx.stroke();
-      }
-    };
-
-    drawLine(11, 12);
-
-    drawLine(11, 13);
-    drawLine(13, 15);
-
-    drawLine(12, 14);
-    drawLine(14, 16);
-
-    drawLine(11, 23);
-    drawLine(12, 24);
-
-    drawLine(23, 24);
+    event.target.value = "";
   };
 
   const handleStartTimedSession =
@@ -1090,94 +1307,99 @@ export default function App() {
 
       const countInterval =
         window.setInterval(() => {
-          setCountdown((prev) => {
-            if (prev === 1) {
-              clearInterval(
-                countInterval
-              );
+          setCountdown(
+            (previous) => {
+              if (previous === 1) {
+                clearInterval(
+                  countInterval
+                );
 
-              recordedChunksRef.current =
-                [];
+                recordedChunksRef.current =
+                  [];
 
-              try {
-                const mime =
-                  MediaRecorder.isTypeSupported(
-                    "video/mp4"
-                  )
-                    ? "video/mp4"
-                    : "video/webm";
+                try {
+                  const mime =
+                    MediaRecorder.isTypeSupported(
+                      "video/mp4"
+                    )
+                      ? "video/mp4"
+                      : "video/webm";
 
-                const recorder =
-                  new MediaRecorder(
-                    mediaStreamRef.current!,
-                    {
-                      mimeType: mime,
-                    }
-                  );
+                  const recorder =
+                    new MediaRecorder(
+                      mediaStreamRef.current!,
+                      {
+                        mimeType:
+                          mime,
+                      }
+                    );
 
-                recorder.ondataavailable =
-                  (event) => {
-                    if (
-                      event.data.size >
-                      0
-                    ) {
-                      recordedChunksRef.current.push(
+                  recorder.ondataavailable =
+                    (event) => {
+                      if (
                         event.data
-                      );
-                    }
-                  };
+                          .size > 0
+                      ) {
+                        recordedChunksRef.current.push(
+                          event.data
+                        );
+                      }
+                    };
 
-                recorder.start();
+                  recorder.start();
 
-                mediaRecorderRef.current =
-                  recorder;
-              } catch {
-                const recorder =
-                  new MediaRecorder(
-                    mediaStreamRef.current!
-                  );
+                  mediaRecorderRef.current =
+                    recorder;
+                } catch {
+                  const recorder =
+                    new MediaRecorder(
+                      mediaStreamRef.current!
+                    );
 
-                recorder.ondataavailable =
-                  (event) => {
-                    if (
-                      event.data.size >
-                      0
-                    ) {
-                      recordedChunksRef.current.push(
+                  recorder.ondataavailable =
+                    (event) => {
+                      if (
                         event.data
-                      );
-                    }
-                  };
+                          .size > 0
+                      ) {
+                        recordedChunksRef.current.push(
+                          event.data
+                        );
+                      }
+                    };
 
-                recorder.start();
+                  recorder.start();
 
-                mediaRecorderRef.current =
-                  recorder;
+                  mediaRecorderRef.current =
+                    recorder;
+                }
+
+                setIsRecording(
+                  true
+                );
+
+                setRecordingSeconds(
+                  0
+                );
+
+                setJabs(0);
+                setCrosses(0);
+                setCombosCount(
+                  0
+                );
+
+                speakFeedback(
+                  "Fight!"
+                );
+
+                return null;
               }
 
-              setIsRecording(
-                true
-              );
-
-              setRecordingSeconds(
-                0
-              );
-
-              setJabs(0);
-              setCrosses(0);
-              setCombosCount(0);
-
-              speakFeedback(
-                "Fight!"
-              );
-
-              return null;
+              return previous
+                ? previous - 1
+                : null;
             }
-
-            return prev
-              ? prev - 1
-              : null;
-          });
+          );
         }, 1000);
     };
 
@@ -1283,10 +1505,10 @@ export default function App() {
                         ?.video_url
                     : undefined,
               });
-            } catch (err) {
+            } catch (error) {
               console.error(
                 "Workout upload failed:",
-                err
+                error
               );
 
               setSessionReport({
@@ -1322,11 +1544,15 @@ export default function App() {
     setJabs(0);
     setCrosses(0);
     setCombosCount(0);
+
     setLastPunch(null);
     setLastCombo(null);
     setAiAdvice(null);
+
     setSessionReport(null);
+
     setIsRecording(false);
+
     setRecordingSeconds(0);
     setCountdown(null);
 
@@ -1335,9 +1561,7 @@ export default function App() {
     prevLandmarksRef.current =
       null;
 
-    if (
-      canvasRef.current
-    ) {
+    if (canvasRef.current) {
       const ctx =
         canvasRef.current.getContext(
           "2d"
@@ -1355,25 +1579,19 @@ export default function App() {
   };
 
   const formatTimer = (
-    secs: number
+    seconds: number
   ) => {
-    const mins =
-      Math.floor(secs / 60);
+    const minutes =
+      Math.floor(seconds / 60);
 
     const remainder =
-      secs % 60;
+      seconds % 60;
 
-    return `${mins
+    return `${minutes
       .toString()
-      .padStart(
-        2,
-        "0"
-      )}:${remainder
+      .padStart(2, "0")}:${remainder
       .toString()
-      .padStart(
-        2,
-        "0"
-      )}`;
+      .padStart(2, "0")}`;
   };
 
   return (
@@ -1594,7 +1812,7 @@ export default function App() {
             </div>
 
             {sessionReport && (
-              <div className="bg-slate-950 border border-amber-500/40 rounded-2xl p-3.5 space-y-2.5 animate-fade-in">
+              <div className="bg-slate-950 border border-amber-500/40 rounded-2xl p-3.5 space-y-2.5">
 
                 <div className="flex justify-between items-center border-b border-slate-800 pb-2">
                   <span className="text-xs font-bold text-amber-400 flex items-center gap-1.5 uppercase">
@@ -1635,6 +1853,7 @@ export default function App() {
                       }
                     </p>
                   </div>
+
                 </div>
 
                 {sessionReport.videoUrl && (
@@ -1663,13 +1882,13 @@ export default function App() {
                 value={
                   selectedFighter
                 }
-                onChange={(e) => {
+                onChange={(event) => {
                   setSelectedFighter(
-                    e.target.value
+                    event.target.value
                   );
 
                   if (
-                    e.target.value ===
+                    event.target.value ===
                     "MEXICAN_PRESSURE"
                   ) {
                     setActiveTheme(
@@ -1685,12 +1904,12 @@ export default function App() {
               >
                 {Object.values(
                   FIGHTER_STYLES
-                ).map((f) => (
+                ).map((fighter) => (
                   <option
-                    key={f.id}
-                    value={f.id}
+                    key={fighter.id}
+                    value={fighter.id}
                   >
-                    {f.name}
+                    {fighter.name}
                   </option>
                 ))}
               </select>
@@ -1736,6 +1955,7 @@ export default function App() {
                     COMBOS
                   </p>
                 </div>
+
               </div>
             </div>
 
@@ -1750,6 +1970,7 @@ export default function App() {
                   ? aiAdvice.feedback
                   : "Awaiting movement telemetry..."}
               </p>
+
             </div>
           </div>
 
@@ -1830,6 +2051,7 @@ export default function App() {
                 >
                   <X className="w-5 h-5" />
                 </button>
+
               </div>
 
               <div className="space-y-2.5">
@@ -1846,23 +2068,25 @@ export default function App() {
                       "ggg",
                       "loma",
                     ] as Theme[]
-                  ).map((t) => (
+                  ).map((theme) => (
                     <button
-                      key={t}
+                      key={theme}
                       onClick={() =>
                         setActiveTheme(
-                          t
+                          theme
                         )
                       }
                       className={`h-11 rounded-xl border text-xs capitalize font-bold touch-manipulation ${
-                        activeTheme === t
+                        activeTheme ===
+                        theme
                           ? "bg-slate-900 border-slate-700 text-slate-100"
                           : "bg-slate-950 border-slate-900 text-slate-500"
                       }`}
                     >
-                      {t}
+                      {theme}
                     </button>
                   ))}
+
                 </div>
               </div>
 
@@ -1953,6 +2177,7 @@ export default function App() {
                         : "OFF"}
                     </div>
                   </button>
+
                 </div>
               </div>
             </div>
@@ -1960,6 +2185,7 @@ export default function App() {
             <div className="text-[10px] text-slate-600 text-center border-t border-slate-900 pt-4 mt-6">
               Brawler Boxing Labs v2.0 • Full Suite
             </div>
+
           </div>
         </div>
       )}
