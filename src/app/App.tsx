@@ -35,7 +35,10 @@ export default function App() {
         const tracker = new MediaPipeTracker();
         await tracker.init();
 
-        if (cancelled) return;
+        if (cancelled) {
+          tracker.dispose();
+          return;
+        }
 
         trackerRef.current = tracker;
         setModelReady(true);
@@ -57,14 +60,20 @@ export default function App() {
     return () => {
       cancelled = true;
 
+      trackerRef.current?.dispose();
+      trackerRef.current = null;
+
       if (streamRef.current) {
         streamRef.current.getTracks().forEach((track) => track.stop());
+        streamRef.current = null;
       }
     };
   }, []);
 
   async function startCamera() {
     try {
+      setModelError(null);
+
       const stream = await navigator.mediaDevices.getUserMedia({
         video: {
           facingMode: "user",
@@ -77,16 +86,22 @@ export default function App() {
       streamRef.current = stream;
 
       if (videoRef.current) {
+        videoRef.current.src = "";
+        videoRef.current.controls = false;
         videoRef.current.srcObject = stream;
+
         await videoRef.current.play();
       }
 
       setCameraActive(true);
     } catch (error) {
       console.error("Camera error:", error);
+
       setModelError(
         "Camera access was not available. Check your browser permission."
       );
+
+      setCameraActive(false);
     }
   }
 
@@ -95,7 +110,11 @@ export default function App() {
     streamRef.current = null;
 
     if (videoRef.current) {
+      videoRef.current.pause();
       videoRef.current.srcObject = null;
+      videoRef.current.removeAttribute("src");
+      videoRef.current.controls = false;
+      videoRef.current.load();
     }
 
     setCameraActive(false);
@@ -108,7 +127,11 @@ export default function App() {
       return;
     }
 
+    streamRef.current?.getTracks().forEach((track) => track.stop());
+    streamRef.current = null;
+
     const url = URL.createObjectURL(file);
+
     videoRef.current.srcObject = null;
     videoRef.current.src = url;
     videoRef.current.controls = true;
@@ -118,6 +141,7 @@ export default function App() {
     });
 
     setCameraActive(false);
+    setModelError(null);
   }
 
   function analyzeFrame() {
@@ -128,7 +152,8 @@ export default function App() {
       return;
     }
 
-    const landmarks = tracker.detect(video, performance.now());
+    const timestamp = performance.now();
+    const landmarks = tracker.detect(video, timestamp);
 
     if (!landmarks) {
       return;
@@ -137,7 +162,8 @@ export default function App() {
     const fused = fusionRef.current.update({
       source: "mediapipe",
       landmarks,
-      timestamp: performance.now(),
+      timestamp,
+      confidence: 0.9,
     });
 
     if (!fused) {
@@ -149,7 +175,9 @@ export default function App() {
 
     if (punch.detected) {
       setPunches((value) => value + 1);
-      setCoachAdvice(coachRef.current.analyzePunch(punch, metrics));
+      setCoachAdvice(
+        coachRef.current.analyzePunch(punch, metrics)
+      );
     }
   }
 
@@ -163,14 +191,19 @@ export default function App() {
 
     frame = requestAnimationFrame(loop);
 
-    return () => cancelAnimationFrame(frame);
-  });
+    return () => {
+      cancelAnimationFrame(frame);
+    };
+  }, []);
 
   return (
     <main className="app">
       <header className="topbar">
         <div>
-          <div className="eyebrow">AI BOXING BIOMECHANICS LAB</div>
+          <div className="eyebrow">
+            AI BOXING BIOMECHANICS LAB
+          </div>
+
           <h1>
             BRAWLER <span>LABS</span>
           </h1>
@@ -178,7 +211,9 @@ export default function App() {
 
         <div className="system-pill">
           <span className="pulse" />
-          {modelReady ? "TRACKING SYSTEM READY" : "INITIALIZING TRACKING"}
+          {modelReady
+            ? "TRACKING SYSTEM READY"
+            : "INITIALIZING TRACKING"}
         </div>
       </header>
 
@@ -195,25 +230,38 @@ export default function App() {
             {!cameraActive && !videoRef.current?.src && (
               <div className="video-empty">
                 <Camera size={34} />
-                <strong>Training camera offline</strong>
-                <span>Start your camera or upload a video.</span>
+
+                <strong>
+                  Training camera offline
+                </strong>
+
+                <span>
+                  Start your camera or upload a video.
+                </span>
               </div>
             )}
           </div>
 
           <div className="controls">
-            <button className="primary" onClick={startCamera}>
+            <button
+              className="primary"
+              onClick={startCamera}
+            >
               <Camera size={17} />
               Start Camera
             </button>
 
-            <button className="secondary" onClick={stopCamera}>
+            <button
+              className="secondary"
+              onClick={stopCamera}
+            >
               Stop Camera
             </button>
 
             <label className="secondary">
               <Upload size={17} />
               Upload Video
+
               <input
                 type="file"
                 accept="video/*"
@@ -240,12 +288,20 @@ export default function App() {
           </div>
 
           <div className="bar">
-            <i style={{ width: `${Math.min(punches * 4, 100)}%` }} />
+            <i
+              style={{
+                width: `${Math.min(
+                  punches * 4,
+                  100
+                )}%`,
+              }}
+            />
           </div>
 
           <p>
-            Punch detection combines pose landmarks, motion metrics,
-            and temporal movement analysis.
+            Punch detection combines pose landmarks,
+            motion metrics, and temporal movement
+            analysis.
           </p>
         </article>
 
@@ -276,16 +332,21 @@ export default function App() {
 
           <div className="health">
             <Activity size={16} />
+
             <div>
               <strong>Pose Tracking</strong>
+
               <small>
-                {modelReady ? "Operational" : "Initializing"}
+                {modelReady
+                  ? "Operational"
+                  : "Initializing"}
               </small>
             </div>
           </div>
 
           <div className="health">
             <Activity size={16} />
+
             <div>
               <strong>Tracker Fusion</strong>
               <small>Ready</small>
@@ -294,13 +355,16 @@ export default function App() {
 
           <div className="health">
             <Activity size={16} />
+
             <div>
               <strong>AI Coach</strong>
               <small>Ready</small>
             </div>
           </div>
 
-          {modelError && <p>{modelError}</p>}
+          {modelError && (
+            <p>{modelError}</p>
+          )}
         </article>
 
         <article className="panel wide">
@@ -309,16 +373,26 @@ export default function App() {
           </div>
 
           <p>
-            Reference profiles are separated from measured user data and
-            are used for style comparison rather than unsupported ratings.
+            Reference profiles are separated from
+            measured user data and are used for style
+            comparison rather than unsupported ratings.
           </p>
 
           <div className="fighters">
             {fighters.map((fighter) => (
-              <div className="fighter" key={fighter.name}>
+              <div
+                className="fighter"
+                key={fighter.name}
+              >
                 <b>{fighter.name}</b>
-                <small>{fighter.stance}</small>
-                <em>{fighter.style}</em>
+
+                <small>
+                  {fighter.stance}
+                </small>
+
+                <em>
+                  {fighter.style}
+                </em>
               </div>
             ))}
           </div>
@@ -326,7 +400,8 @@ export default function App() {
       </section>
 
       <footer>
-        Brawler Labs 2.0 · Real-time biomechanics research environment
+        Brawler Labs 2.0 · Real-time biomechanics
+        research environment
       </footer>
     </main>
   );
