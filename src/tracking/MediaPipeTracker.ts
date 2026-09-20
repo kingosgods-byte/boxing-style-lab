@@ -11,9 +11,8 @@ export class MediaPipeTracker {
   async init() {
     if (this.pose) return;
 
-    // Fixed: Pointing to unpkg or versionless WASM CDN avoids 404/MIME type issues on jsDelivr
     const vision = await FilesetResolver.forVisionTasks(
-      "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@latest/wasm"
+      "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.22/wasm"
     );
 
     this.pose = await PoseLandmarker.createFromOptions(
@@ -42,17 +41,14 @@ export class MediaPipeTracker {
   detect(
     video: HTMLVideoElement,
     timestamp: number
-  ) {
+  ): Landmark[] | null {
     if (!this.pose) return null;
 
-    const result =
-      this.pose.detectForVideo(
-        video,
-        timestamp
-      );
+    const result = this.pose.detectForVideo(
+      video,
+      timestamp
+    );
 
-    return result.landmarks?.[0] as
-      | Landmark[]
-      | undefined;
+    return (result.landmarks?.[0] as Landmark[] | undefined) ?? null;
   }
 }
