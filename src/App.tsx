@@ -100,23 +100,9 @@ interface SessionReport {
   videoUrl?: string;
 }
 
-/*
- * MediaPipe Pose landmark connections.
- *
- * 0  nose
- * 11/12 shoulders
- * 13/14 elbows
- * 15/16 wrists
- * 23/24 hips
- * 25/26 knees
- * 27/28 ankles
- * 29/30 heels
- * 31/32 feet
- */
 const POSE_CONNECTIONS: Array<
   [number, number]
 > = [
-  // Head
   [0, 1],
   [1, 2],
   [2, 3],
@@ -126,42 +112,33 @@ const POSE_CONNECTIONS: Array<
   [5, 6],
   [6, 8],
 
-  // Face / ears
   [9, 10],
 
-  // Torso
   [11, 12],
   [11, 23],
   [12, 24],
   [23, 24],
 
-  // Left arm
   [11, 13],
   [13, 15],
 
-  // Right arm
   [12, 14],
   [14, 16],
 
-  // Left hand
   [15, 17],
   [15, 19],
   [15, 21],
 
-  // Right hand
   [16, 18],
   [16, 20],
   [16, 22],
 
-  // Left leg
   [23, 25],
   [25, 27],
 
-  // Right leg
   [24, 26],
   [26, 28],
 
-  // Feet
   [27, 29],
   [29, 31],
   [28, 30],
@@ -282,10 +259,6 @@ export default function App() {
       null
     );
 
-  /*
-   * THIS is now the only MediaPipe tracker
-   * used by the application.
-   */
   const trackerRef =
     useRef<MediaPipeTracker | null>(
       null
@@ -343,13 +316,6 @@ export default function App() {
   const currentTheme =
     THEMES[activeTheme];
 
-  /*
-   * MEDIA PIPE TRACKER INITIALIZATION
-   *
-   * IMPORTANT:
-   * App.tsx no longer creates PoseLandmarker
-   * directly. MediaPipeTracker owns that logic.
-   */
   useEffect(() => {
     let cancelled = false;
 
@@ -733,9 +699,6 @@ export default function App() {
       ctx.stroke();
     }
 
-    /*
-     * Draw joints on top of the bones.
-     */
     for (const point of landmarks) {
       if (!point) {
         continue;
@@ -764,9 +727,6 @@ export default function App() {
     ctx.restore();
   };
 
-  /*
-   * Main camera/video tracking loop.
-   */
   const processVideoFrame =
     () => {
       const video =
@@ -781,10 +741,6 @@ export default function App() {
         return;
       }
 
-      /*
-       * Keep checking until the video
-       * has real dimensions.
-       */
       if (
         video.paused ||
         video.ended ||
@@ -802,11 +758,6 @@ export default function App() {
       const canvas =
         canvasRef.current;
 
-      /*
-       * IMPORTANT:
-       * Use the MediaPipeTracker rather
-       * than creating another landmarker.
-       */
       const tracker =
         trackerRef.current;
 
@@ -826,12 +777,24 @@ export default function App() {
             performance.now()
           );
 
+        /*
+         * TEMPORARY TRACKING DIAGNOSTIC
+         *
+         * This tells us whether MediaPipe
+         * is actually returning landmarks.
+         */
+        if (landmarks) {
+          console.log(
+            "POSE DETECTED:",
+            landmarks.length
+          );
+        } else {
+          console.log(
+            "NO POSE DETECTED"
+          );
+        }
+
         if (canvas) {
-          /*
-           * Canvas uses the exact same
-           * intrinsic dimensions as the
-           * source video.
-           */
           if (
             canvas.width !==
               video.videoWidth ||
@@ -871,11 +834,6 @@ export default function App() {
                 );
               }
 
-              /*
-               * Feed the exact same
-               * landmarks into the
-               * biomechanics engine.
-               */
               const punch =
                 analyzerRef.current.update(
                   smoothed
@@ -986,13 +944,6 @@ export default function App() {
                 }
               }
             } else {
-              /*
-               * No pose detected.
-               * Reset smoothing so the
-               * next detected pose does
-               * not interpolate from an
-               * old position.
-               */
               prevLandmarksRef.current =
                 null;
             }
